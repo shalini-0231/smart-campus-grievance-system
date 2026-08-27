@@ -150,14 +150,14 @@ const AdminDashboard = () => {
 
         <select value={category} onChange={(e) => setCategory(e.target.value)}>
           <option value="">All Categories</option>
-          {['Academic','Hostel','Transport','Infrastructure','Internet/Wi-Fi','Harassment','Ragging','Safety','Other'].map(c => (
+          {['Academic','Hostel','Transport','Infrastructure','Internet/Wi-Fi','Harassment','Ragging','Safety','OD Form Issue','Canteen Dish Issue','Other'].map(c => (
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
 
         <select value={department} onChange={(e) => setDepartment(e.target.value)}>
           <option value="">All Departments</option>
-          {['Academic Department','Hostel Administration','Transport Department','IT Department','Maintenance Department','Student Welfare / Anti-Ragging Committee','General Administration'].map(d => (
+          {['Academic Department','Hostel Administration','Transport Department','IT Department','Maintenance Department','Student Welfare / Anti-Ragging Committee','Academic Office / OD Cell','Canteen & Hospitality','General Administration'].map(d => (
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
@@ -278,6 +278,36 @@ const AdminDashboard = () => {
                 <BarChart2 size={15} /> View Full Analytics
               </button>
             </div>
+
+            {/* Dish-Level Complaint Analytics (Canteen & Hospitality) */}
+            {stats.dishStats && stats.dishStats.length > 0 && (
+              <div className="glass-card" style={{ marginTop: '1rem', border: '1px solid rgba(234, 179, 8, 0.3)', background: 'rgba(234, 179, 8, 0.02)' }}>
+                <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem', color: '#eab308' }}>
+                  🍲 Recurring Problem Dishes
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {stats.dishStats.map((item, idx) => (
+                    <div key={idx} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '0.8rem'
+                    }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.dishName}</span>
+                      <span style={{
+                        padding: '0.15rem 0.5rem',
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        color: '#f87171',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '10px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700
+                      }}>
+                        {item.count} complaint{item.count > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -20,6 +20,10 @@ const getAssignedDepartment = (category) => {
     case 'Ragging':
     case 'Safety':
       return 'Student Welfare / Anti-Ragging Committee';
+    case 'OD Form Issue':
+      return 'Academic Office / OD Cell';
+    case 'Canteen Dish Issue':
+      return 'Canteen & Hospitality';
     default:
       return 'General Administration';
   }
@@ -65,14 +69,22 @@ const checkSLAEscalations = async () => {
 };
 
 // Local fallback AI implementation if the Flask microservice is not online
-const localAIAnalyze = (text) => {
+const localAIAnalyze = (text, eventDate = null, issueType = null) => {
   const lowercaseText = text.toLowerCase();
   
   // Keyword categories
   const low = ["fan", "light", "minor", "suggestion", "classroom equipment", "bulb", "switch", "cleanliness"];
-  const medium = ["repeated", "internet problem", "water problem", "hostel issue", "transport delay", "wifi", "wi-fi", "speed", "mess", "canteen", "bus"];
+  const medium = ["repeated", "internet problem", "water problem", "hostel issue", "transport delay", "wifi", "wi-fi", "speed", "mess", "canteen", "bus", "od form", "on duty", "attendance not updated", "event approval", "mentor sign", "hod sign", "class counsellor", "class presentation", "od cell"];
   const high = ["exam issue", "academic emergency", "repeated complaint", "serious infrastructure issue", "fees", "hall ticket", "grade", "results", "leaking", "flood", "broken door"];
   const critical = ["harassment", "ragging", "threat", "violence", "safety", "assault", "emergency", "bully", "abuse", "suicidal", "steal", "theft", "weapon"];
+
+  let isPastEvent = false;
+  if (eventDate) {
+    try {
+      const parsed = new Date(eventDate);
+      if (parsed < new Date()) isPastEvent = true;
+    } catch (e) {}
+  }
 
   let basePriority = "LOW";
   let baseScore = 0.20;
@@ -145,11 +157,29 @@ const localAIAnalyze = (text) => {
     : "General complaint context.";
   if (sentiment === "NEGATIVE") reason += " Negative sentiment identified.";
 
+  // Check Food Safety Override
+  let foodSafetyOverride = false;
+  let finalPriority = priority;
+  let finalScore = score;
+
+  if (issueType === 'FOREIGN_OBJECT' || lowercaseText.includes('foreign object') || lowercaseText.includes('cockroach') || lowercaseText.includes('insect')) {
+    finalPriority = 'CRITICAL';
+    finalScore = 0.90;
+    reason = '[ALERT] Food Safety Priority Override: Escalated due to health and food safety concern (FOREIGN_OBJECT).';
+    foodSafetyOverride = true;
+  } else if (issueType === 'HYGIENE' || lowercaseText.includes('hygiene') || lowercaseText.includes('stale food') || lowercaseText.includes('dirty food')) {
+    finalPriority = 'HIGH';
+    finalScore = 0.75;
+    reason = '[ALERT] Food Safety Priority Override: Escalated due to health and food safety concern (HYGIENE).';
+    foodSafetyOverride = true;
+  }
+
   return {
-    priority,
-    score: round(score, 2),
+    priority: finalPriority,
+    score: round(finalScore, 2),
     sentiment,
-    reason: reason + " (Local Fallback Analysis)"
+    reason: reason + " (Local Fallback Analysis)",
+    isFoodSafetyOverride: foodSafetyOverride
   };
 };
 
@@ -161,7 +191,30 @@ const round = (num, decimalPlaces) => {
 // Create a new complaint
 exports.createComplaint = async (req, res) => {
   try {
-    const { title, description, category, anonymous, location, attachment } = req.body;
+    const { 
+      title, 
+      description, 
+      category, 
+      anonymous, 
+      location, 
+      attachment,
+      eventName,
+      eventDate,
+      facultyInChargeName,
+      mentorName,
+      classCounsellorName,
+      hodName,
+      pendingApprovalFrom,
+      odFormStatus,
+      verificationProof,
+      eventReturnStatus,
+      presentationRemarks,
+      canteenLocation,
+      dishName,
+      issueType,
+      mealTime,
+      dishPhoto
+    } = req.body;
     const studentId = req.user.id;
 
     if (!title || !description || !category) {
@@ -172,14 +225,16 @@ exports.createComplaint = async (req, res) => {
     let aiResults;
     try {
       const aiResponse = await axios.post(`${process.env.AI_SERVICE_URL || 'http://127.0.0.1:5000'}/api/ai/analyze`, {
-        text: description
+        text: description,
+        eventDate: eventDate || null,
+        issueType: issueType || null
       }, { timeout: 3000 });
       
       aiResults = aiResponse.data;
       console.log('AI Service analysis results:', aiResults);
     } catch (aiError) {
       console.warn('AI Service is unreachable, falling back to backend keywords classification.', aiError.message);
-      aiResults = localAIAnalyze(description);
+      aiResults = localAIAnalyze(description, eventDate, issueType);
     }
 
     // Dynamic routing & SLA calculation
@@ -206,7 +261,23 @@ exports.createComplaint = async (req, res) => {
       attachment: attachment || '',
       anonymous: !!anonymous,
       slaDeadline,
-      status: 'SUBMITTED'
+      status: 'SUBMITTED',
+      eventName: eventName || '',
+      eventDate: eventDate ? new Date(eventDate) : undefined,
+      facultyInChargeName: facultyInChargeName || '',
+      mentorName: mentorName || '',
+      classCounsellorName: classCounsellorName || '',
+      hodName: hodName || '',
+      pendingApprovalFrom: pendingApprovalFrom || '',
+      odFormStatus: odFormStatus || '',
+      verificationProof: verificationProof || '',
+      eventReturnStatus: eventReturnStatus || '',
+      presentationRemarks: presentationRemarks || '',
+      canteenLocation: canteenLocation || '',
+      dishName: dishName || '',
+      issueType: issueType || '',
+      mealTime: mealTime || '',
+      dishPhoto: dishPhoto || ''
     });
 
     await newComplaint.save();
@@ -479,7 +550,7 @@ exports.getAdminStatistics = async (req, res) => {
     const critical = await Complaint.countDocuments({ priority: 'CRITICAL' });
 
     // Category distribution for charts/tables
-    const categories = ['Academic', 'Hostel', 'Transport', 'Infrastructure', 'Internet/Wi-Fi', 'Harassment', 'Ragging', 'Safety', 'Other'];
+    const categories = ['Academic', 'Hostel', 'Transport', 'Infrastructure', 'Internet/Wi-Fi', 'Harassment', 'Ragging', 'Safety', 'OD Form Issue', 'Canteen Dish Issue', 'Other'];
     const categoryStats = {};
     for (const cat of categories) {
       categoryStats[cat] = await Complaint.countDocuments({ category: cat });
@@ -493,12 +564,23 @@ exports.getAdminStatistics = async (req, res) => {
       'IT Department', 
       'Maintenance Department', 
       'Student Welfare / Anti-Ragging Committee',
+      'Academic Office / OD Cell',
+      'Canteen & Hospitality',
       'General Administration'
     ];
     const departmentStats = {};
     for (const dept of departments) {
       departmentStats[dept] = await Complaint.countDocuments({ department: dept });
     }
+
+    // Dish-level complaint breakdown for recurring problem dishes
+    const dishAgg = await Complaint.aggregate([
+      { $match: { category: 'Canteen Dish Issue', dishName: { $ne: '' } } },
+      { $group: { _id: '$dishName', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 }
+    ]);
+    const dishStats = dishAgg.map(d => ({ dishName: d._id, count: d.count }));
 
     res.status(200).json({
       total,
@@ -512,7 +594,8 @@ exports.getAdminStatistics = async (req, res) => {
       critical,
       activeComplaints: total - resolved,
       categoryStats,
-      departmentStats
+      departmentStats,
+      dishStats
     });
   } catch (error) {
     res.status(500).json({ message: 'Error retrieving statistics.', error: error.message });

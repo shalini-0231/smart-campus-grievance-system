@@ -32,6 +32,8 @@ const ComplaintSchema = new mongoose.Schema({
       'Harassment',
       'Ragging',
       'Safety',
+      'OD Form Issue',
+      'Canteen Dish Issue',
       'Other'
     ]
   },
@@ -99,6 +101,76 @@ const ComplaintSchema = new mongoose.Schema({
     default: ''
   },
   resolutionRemarks: {
+    type: String,
+    default: ''
+  },
+  // OD Form specific fields
+  eventName: {
+    type: String,
+    default: ''
+  },
+  eventDate: {
+    type: Date
+  },
+  facultyInChargeName: {
+    type: String,
+    default: ''
+  },
+  mentorName: {
+    type: String,
+    default: ''
+  },
+  classCounsellorName: {
+    type: String,
+    default: ''
+  },
+  hodName: {
+    type: String,
+    default: ''
+  },
+  pendingApprovalFrom: {
+    type: String,
+    enum: ['MENTOR', 'CLASS_COUNSELLOR', 'HOD', 'ACADEMIC_CELL', 'NONE_APPROVED', ''],
+    default: ''
+  },
+  odFormStatus: {
+    type: String,
+    enum: ['NOT_SUBMITTED', 'PENDING_APPROVAL', 'REJECTED', 'APPROVED_NOT_UPDATED', ''],
+    default: ''
+  },
+  verificationProof: {
+    type: String,
+    default: ''
+  },
+  eventReturnStatus: {
+    type: String,
+    enum: ['NOT_RETURNED', 'RETURNED_PENDING_PRESENTATION', 'PRESENTATION_COMPLETED', ''],
+    default: ''
+  },
+  presentationRemarks: {
+    type: String,
+    default: ''
+  },
+  // Canteen Dish Issue specific fields
+  canteenLocation: {
+    type: String,
+    default: ''
+  },
+  dishName: {
+    type: String,
+    default: ''
+  },
+  issueType: {
+    type: String,
+    enum: ['QUALITY', 'HYGIENE', 'PRICING', 'AVAILABILITY', 'FOREIGN_OBJECT', 'OTHER', ''],
+    default: ''
+  },
+  mealTime: {
+    type: String,
+    enum: ['Breakfast', 'Lunch', 'Snacks', 'Dinner', ''],
+    default: ''
+  },
+  dishPhoto: {
     type: String,
     default: ''
   }

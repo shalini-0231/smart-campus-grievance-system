@@ -6,7 +6,8 @@ import { api } from '../services/api';
 import { 
   ArrowLeft, AlertTriangle, ShieldCheck, User, Calendar, Tag, Building2, 
   Brain, Star, CheckCircle, RefreshCcw, Save, MapPin, Paperclip, 
-  UserCheck, Phone, Mail, Clock, Zap, ShieldAlert, ArrowUpRight
+  UserCheck, Phone, Mail, Clock, Zap, ShieldAlert, ArrowUpRight,
+  FileText, CheckCircle2, Presentation, AlertCircle, ExternalLink
 } from 'lucide-react';
 
 // Live SLA Countdown Timer Component
@@ -146,6 +147,8 @@ const departmentsList = [
   'IT Department',
   'Maintenance Department',
   'Student Welfare / Anti-Ragging Committee',
+  'Academic Office / OD Cell',
+  'Canteen & Hospitality',
   'Higher Authority (Principal & Campus Security Management)',
   'General Administration'
 ];
@@ -552,44 +555,206 @@ const ComplaintDetails = () => {
 
             {/* Extracted Trigger Keywords */}
             {complaint.priorityReason && (
-              <div style={{ marginBottom: '1rem' }}>
-                <div className="detail-meta-label" style={{ marginBottom: '0.35rem' }}>Highlighted Urgency Keywords Detected</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                  {(() => {
-                    const matches = complaint.priorityReason.match(/'([^']+)'/g);
-                    if (matches && matches.length > 0) {
-                      return matches.map((m, idx) => (
-                        <span key={idx} style={{
-                          padding: '0.2rem 0.5rem',
-                          background: 'rgba(239, 68, 68, 0.15)',
-                          color: '#f87171',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          fontFamily: 'monospace'
-                        }}>
-                          🔑 {m.replace(/'/g, '')}
-                        </span>
-                      ));
-                    }
-                    return (
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                        General context matching
-                      </span>
-                    );
-                  })()}
-                </div>
+              <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+                <div className="detail-meta-label" style={{ marginBottom: '0.35rem' }}>AI Urgency & Context Explanation</div>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  {complaint.priorityReason}
+                </p>
               </div>
             )}
-
-            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.85rem', borderRadius: 'var(--border-radius-sm)', borderLeft: '3px solid var(--accent-cyan)' }}>
-              <div className="detail-meta-label">NLP Classification Reasoning</div>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                {complaint.priorityReason}
-              </p>
-            </div>
           </div>
+
+          {/* OD Form Approval & Verification Card */}
+          {(complaint.category === 'OD Form Issue' || complaint.eventName) && (
+            <div className="glass-card" style={{ border: '1px solid rgba(6, 182, 212, 0.3)', background: 'rgba(6, 182, 212, 0.02)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', margin: 0, color: 'var(--accent-cyan)' }}>
+                  <FileText size={20} /> On-Duty (OD) Approval & Verification Details
+                </h3>
+                <span className="badge badge-status-assigned" style={{ fontSize: '0.75rem', background: 'rgba(6, 182, 212, 0.15)', color: 'var(--accent-cyan)' }}>
+                  🎓 Academic OD Lifecycle
+                </span>
+              </div>
+
+              {/* Event Meta */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+                <div>
+                  <div className="detail-meta-label">Event / Competition</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)', marginTop: '0.15rem' }}>
+                    {complaint.eventName || 'N/A'}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="detail-meta-label">Event Date</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem', marginTop: '0.15rem' }}>
+                    {complaint.eventDate ? new Date(complaint.eventDate).toLocaleDateString() : 'N/A'}
+                    {complaint.eventDate && new Date(complaint.eventDate) < new Date() && (
+                      <span className="badge badge-priority-high" style={{ marginLeft: '0.4rem', fontSize: '0.65rem' }}>
+                        ⚠️ Event Date Passed
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="detail-meta-label">Faculty In-Charge</div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                    {complaint.facultyInChargeName || 'Not specified'}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="detail-meta-label">OD Form Status</div>
+                  <div style={{ marginTop: '0.15rem' }}>
+                    <span className={`badge badge-status-${(complaint.odFormStatus || 'PENDING').toLowerCase()}`}>
+                      {(complaint.odFormStatus || 'PENDING_APPROVAL').replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Signature Workflow Bottleneck Visualizer */}
+              <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <AlertCircle size={14} color="var(--priority-medium)" /> Multi-Stage Signature Tracking
+                </h4>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem' }}>
+                  {[
+                    { id: 'MENTOR', label: '1. Mentor Sign', name: complaint.mentorName },
+                    { id: 'CLASS_COUNSELLOR', label: '2. Class Counsellor', name: complaint.classCounsellorName },
+                    { id: 'HOD', label: '3. HOD Approval', name: complaint.hodName },
+                    { id: 'ACADEMIC_CELL', label: '4. Academic Cell', name: 'OD Cell Admin' }
+                  ].map((stage) => {
+                    const isStuck = complaint.pendingApprovalFrom === stage.id;
+                    return (
+                      <div key={stage.id} style={{ 
+                        padding: '0.6rem', 
+                        borderRadius: '6px', 
+                        background: isStuck ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.02)',
+                        border: `1px solid ${isStuck ? 'var(--priority-medium)' : 'var(--border-color)'}`
+                      }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: isStuck ? 'var(--priority-medium)' : 'var(--text-secondary)' }}>
+                          {stage.label}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                          {stage.name || 'Not assigned'}
+                        </div>
+                        {isStuck && (
+                          <div style={{ fontSize: '0.65rem', color: 'var(--priority-medium)', fontWeight: 700, marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <Clock size={11} /> STUCK HERE
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Fake OD Guard Proof Verification */}
+              <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={{ padding: '0.85rem', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--status-resolved)', fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+                    <ShieldCheck size={16} /> Genuine OD Proof Verification
+                  </div>
+                  {complaint.verificationProof ? (
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.4rem' }}>
+                      <Paperclip size={14} /> 
+                      <span style={{ wordBreak: 'break-all' }}>{complaint.verificationProof}</span>
+                      <span className="badge badge-status-resolved" style={{ fontSize: '0.65rem' }}>Verified Attached</span>
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--priority-medium)', marginTop: '0.25rem' }}>
+                      ⚠️ No verification proof attached. Faculty should verify event details before approval to prevent fake ODs.
+                    </p>
+                  )}
+                </div>
+
+                {/* Class Presentation & Return Tracker */}
+                <div style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-blue)', fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+                    <Presentation size={16} /> Post-Event Return & Class Presentation
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>
+                    Status: <strong style={{ color: 'var(--text-primary)' }}>{(complaint.eventReturnStatus || 'NOT_RETURNED').replace(/_/g, ' ')}</strong>
+                  </div>
+                  {complaint.presentationRemarks && (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontStyle: 'italic' }}>
+                      Remarks: "{complaint.presentationRemarks}"
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Canteen Dish Issue Inspection Card */}
+          {(complaint.category === 'Canteen Dish Issue' || complaint.dishName) && (
+            <div className="glass-card" style={{ border: '1px solid rgba(234, 179, 8, 0.3)', background: 'rgba(234, 179, 8, 0.02)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', margin: 0, color: '#eab308' }}>
+                  🍲 Canteen Dish & Food Sanitation Report
+                </h3>
+                {['FOREIGN_OBJECT', 'HYGIENE'].includes(complaint.issueType) && (
+                  <span className="badge badge-priority-critical" style={{ fontSize: '0.75rem', fontWeight: 700 }}>
+                    🛡️ Food Safety Priority Override
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                <div>
+                  <div className="detail-meta-label">Canteen / Mess Location</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '0.2rem' }}>
+                    📍 {complaint.canteenLocation || 'Campus Canteen'}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="detail-meta-label">Dish / Food Item Name</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--accent-cyan)', marginTop: '0.2rem' }}>
+                    🍲 {complaint.dishName || 'Not specified'}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="detail-meta-label">Primary Issue Classification</div>
+                  <div style={{ marginTop: '0.2rem' }}>
+                    <span style={{
+                      padding: '0.2rem 0.6rem',
+                      background: ['FOREIGN_OBJECT', 'HYGIENE'].includes(complaint.issueType) ? 'rgba(239, 68, 68, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                      color: ['FOREIGN_OBJECT', 'HYGIENE'].includes(complaint.issueType) ? '#f87171' : '#eab308',
+                      border: `1px solid ${['FOREIGN_OBJECT', 'HYGIENE'].includes(complaint.issueType) ? 'rgba(239, 68, 68, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`,
+                      borderRadius: '4px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700
+                    }}>
+                      {(complaint.issueType || 'QUALITY').replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="detail-meta-label">Meal Serving Time</div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                    ⏰ {complaint.mealTime || 'Lunch'}
+                  </div>
+                </div>
+              </div>
+
+              {complaint.dishPhoto && (
+                <div style={{ marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px dashed var(--border-color)' }}>
+                  <div className="detail-meta-label">Dish Photo / Attachment Evidence</div>
+                  <div style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
+                      📷 {complaint.dishPhoto}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Resolution Remarks Card (if resolved) */}
           {complaint.status === 'RESOLVED' && complaint.resolutionRemarks && (
