@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { Send, AlertTriangle, ArrowLeft, Brain, Sparkles, FileText, CheckCircle2, ShieldCheck, Presentation, MessageSquare } from 'lucide-react';
-import ComplaintChatbot from '../components/ComplaintChatbot';
+import { Send, AlertTriangle, ArrowLeft, Brain, Sparkles, FileText, CheckCircle2, ShieldCheck, Presentation } from 'lucide-react';
 
 const categories = [
   'Academic',
@@ -201,42 +200,7 @@ const SubmitComplaint = () => {
         </div>
       )}
 
-      {/* Mode Selection Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
-        <button 
-          type="button" 
-          className={`btn ${mode === 'quick' ? 'btn-blue' : 'btn-outline'}`}
-          onClick={() => setMode('quick')}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}
-        >
-          <FileText size={15} /> 📝 Quick Form
-        </button>
-
-        <button 
-          type="button" 
-          className={`btn ${mode === 'guided' ? 'btn-blue' : 'btn-outline'}`}
-          onClick={() => setMode('guided')}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}
-        >
-          <MessageSquare size={15} /> 💬 Guided AI Chatbot
-        </button>
-      </div>
-
-      {mode === 'guided' ? (
-        <ComplaintChatbot
-          formData={{
-            title, description, category, locationName, attachment, anonymous,
-            canteenLocation, dishName, issueType, mealTime, dishPhoto,
-            eventName, eventDate, facultyInChargeName, mentorName, classCounsellorName, hodName,
-            pendingApprovalFrom, odFormStatus, verificationProof, eventReturnStatus, presentationRemarks
-          }}
-          updateFormData={updateFormData}
-          onSubmit={handleSubmit}
-          onSwitchToQuick={() => setMode('quick')}
-          loading={loading}
-        />
-      ) : (
-        <div className="detail-layout">
+      <div className="detail-layout">
         {/* Form Column */}
         <div className="glass-card">
           <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -710,7 +674,6 @@ const SubmitComplaint = () => {
           </div>
         </div>
       </div>
-      )}
     </div>
   );
 };
