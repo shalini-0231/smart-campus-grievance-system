@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { ClipboardList, PlusCircle, CheckCircle2, AlertTriangle, Clock, Eye, ShieldAlert } from 'lucide-react';
+import { ClipboardList, PlusCircle, CheckCircle2, AlertTriangle, Clock, Eye, ShieldAlert, ShieldCheck } from 'lucide-react';
 
 const StudentDashboard = () => {
   const [stats, setStats] = useState({ total: 0, pending: 0, resolved: 0, critical: 0 });
@@ -156,8 +156,10 @@ const StudentDashboard = () => {
                       {c.complaintId}
                     </td>
                     <td style={{ fontWeight: 500 }}>
-                      {c.title}
-                      {c.anonymous && <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>(Anonymous)</span>}
+                      <div>{c.title}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem', flexWrap: 'wrap' }}>
+                        {c.anonymous && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>(Anonymous)</span>}
+                      </div>
                     </td>
                     <td>{c.category}</td>
                     <td>
@@ -169,13 +171,15 @@ const StudentDashboard = () => {
                     </td>
                     <td>{formatDate(c.createdAt)}</td>
                     <td>
-                      <button 
-                        className="btn btn-outline" 
-                        onClick={() => navigate(`/complaints/${c._id}`)}
-                        style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                      >
-                        <Eye size={14} /> View
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <button 
+                          className="btn btn-outline" 
+                          onClick={() => navigate(`/complaints/${c._id}`)}
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                        >
+                          <Eye size={14} /> View
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -184,6 +188,7 @@ const StudentDashboard = () => {
           </div>
         )}
       </div>
+
     </div>
   );
 };

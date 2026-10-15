@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { ClipboardList, Clock, CheckCircle2, AlertTriangle, ShieldAlert, RefreshCw, Eye, Layers, Search, BarChart2 } from 'lucide-react';
+import { ClipboardList, Clock, CheckCircle2, AlertTriangle, ShieldAlert, RefreshCw, Eye, Layers, Search, BarChart2, Send } from 'lucide-react';
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -20,6 +20,9 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const { addToast } = useToast();
 
+  // Track which complaint is being notified (by _id) to show spinner
+  const [notifyingId, setNotifyingId] = useState(null);
+
   const loadData = async (showToast = false) => {
     setLoading(true);
     try {
@@ -35,6 +38,34 @@ const AdminDashboard = () => {
       addToast('Failed to load dashboard data', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleNotifyOfficer = async (complaintId, officerEmail, e) => {
+    e.stopPropagation();
+    setNotifyingId(complaintId);
+    try {
+      const res = await api.notifyOfficer(complaintId);
+      addToast(`📧 Email sent to ${officerEmail}!`, 'success');
+      // Update local state immediately — no need for a full reload
+      setComplaints(prev =>
+        prev.map(c =>
+          c._id === complaintId
+            ? {
+                ...c,
+                assignedOfficer: {
+                  ...c.assignedOfficer,
+                  notified: true,
+                  notifiedAt: res.notifiedAt
+                }
+              }
+            : c
+        )
+      );
+    } catch (err) {
+      addToast(err.message || 'Failed to send notification.', 'error');
+    } finally {
+      setNotifyingId(null);
     }
   };
 
@@ -150,14 +181,14 @@ const AdminDashboard = () => {
 
         <select value={category} onChange={(e) => setCategory(e.target.value)}>
           <option value="">All Categories</option>
-          {['Academic','Hostel','Transport','Infrastructure','Internet/Wi-Fi','Harassment','Ragging','Safety','OD Form Issue','Canteen Dish Issue','Other'].map(c => (
+          {['Academic','Hostel','Transport','Infrastructure','Internet/Wi-Fi','Harassment','Ragging','Safety','Canteen Dish Issue','Other'].map(c => (
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
 
         <select value={department} onChange={(e) => setDepartment(e.target.value)}>
           <option value="">All Departments</option>
-          {['Academic Department','Hostel Administration','Transport Department','IT Department','Maintenance Department','Student Welfare / Anti-Ragging Committee','Academic Office / OD Cell','Canteen & Hospitality','General Administration'].map(d => (
+          {['Academic Department','Hostel Administration','Transport Department','IT Department','Maintenance Department','Student Welfare / Anti-Ragging Committee','Canteen & Hospitality','General Administration'].map(d => (
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
@@ -218,13 +249,98 @@ const AdminDashboard = () => {
                           )}
                         </td>
                         <td style={{ fontWeight: 500 }}>
-                          {c.title.length > 28 ? c.title.substring(0, 28) + '…' : c.title}
+                          <div>
+                            {c.title.length > 28 ? c.title.substring(0, 28) + '…' : c.title}
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.2rem', flexWrap: 'wrap' }}>
+                            {c.isDuplicate && (
+                              <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.3)' }}>
+                                🔗 Duplicate
+                              </span>
+                            )}
+                            {c.affectedStudentCount > 1 && (
+                              <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+                                👥 {c.affectedStudentCount} affected
+                              </span>
+                            )}
+                            {c.reopenCount > 0 && (
+                              <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
+                                ⚠️ Reopened ×{c.reopenCount}
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td><span className={getPriorityBadgeClass(c.priority)}>{c.priority}</span></td>
+                        <td>
+                          <span className={getPriorityBadgeClass(c.priority)}>{c.priority}</span>
+                          {c.confidencePercent > 0 && (
+                            <small style={{ display: 'block', fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              {c.confidencePercent}% conf
+                            </small>
+                          )}
+                        </td>
                         <td style={{ fontSize: '0.8rem' }}>{c.department}</td>
                         <td style={{ fontSize: '0.8rem', color: c.assignedOfficer?.name ? 'var(--text-primary)' : 'var(--text-muted)' }}>
                           {c.assignedOfficer?.name ? (
-                            <span>👤 {c.assignedOfficer.name} <small style={{ display: 'block', color: 'var(--accent-cyan)', fontSize: '0.7rem' }}>{c.assignedOfficer.role}</small></span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                              <span>
+                                👤 {c.assignedOfficer.name}
+                                <small style={{ display: 'block', color: 'var(--accent-cyan)', fontSize: '0.7rem' }}>
+                                  {c.assignedOfficer.role}
+                                </small>
+                              </span>
+
+                              {/* Notify button or Notified badge */}
+                              {c.assignedOfficer.notified ? (
+                                <span style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                                  background: 'rgba(34,197,94,0.12)',
+                                  color: '#4ade80',
+                                  border: '1px solid rgba(34,197,94,0.3)',
+                                  borderRadius: '10px',
+                                  padding: '0.15rem 0.55rem',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 700,
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  <CheckCircle2 size={11} />
+                                  Notified ✅&nbsp;
+                                  <span style={{ fontWeight: 400, opacity: 0.8 }}>
+                                    {c.assignedOfficer.notifiedAt
+                                      ? new Date(c.assignedOfficer.notifiedAt).toLocaleString('en-IN', {
+                                          day: '2-digit', month: 'short',
+                                          hour: '2-digit', minute: '2-digit'
+                                        })
+                                      : ''}
+                                  </span>
+                                </span>
+                              ) : (
+                                c.assignedOfficer.email ? (
+                                  <button
+                                    className="btn btn-outline"
+                                    disabled={notifyingId === c._id}
+                                    onClick={(e) => handleNotifyOfficer(c._id, c.assignedOfficer.email, e)}
+                                    style={{
+                                      padding: '0.2rem 0.55rem',
+                                      fontSize: '0.68rem',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.25rem',
+                                      whiteSpace: 'nowrap',
+                                      borderColor: 'rgba(6,182,212,0.4)',
+                                      color: 'var(--accent-cyan)'
+                                    }}
+                                  >
+                                    {notifyingId === c._id ? (
+                                      <span style={{ opacity: 0.7 }}>Sending…</span>
+                                    ) : (
+                                      <><Send size={10} /> Notify Officer</>  
+                                    )}
+                                  </button>
+                                ) : (
+                                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No email on record</span>
+                                )
+                              )}
+                            </div>
                           ) : (
                             <span style={{ fontStyle: 'italic' }}>Unassigned</span>
                           )}

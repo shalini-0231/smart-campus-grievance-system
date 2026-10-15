@@ -7,8 +7,10 @@ import {
   ArrowLeft, AlertTriangle, ShieldCheck, User, Calendar, Tag, Building2, 
   Brain, Star, CheckCircle, RefreshCcw, Save, MapPin, Paperclip, 
   UserCheck, Phone, Mail, Clock, Zap, ShieldAlert, ArrowUpRight,
-  FileText, CheckCircle2, Presentation, AlertCircle, ExternalLink
+  FileText, CheckCircle2, AlertCircle, ExternalLink,
+  Eye, FileImage, Download, Upload, Send, Sparkles, Users, Award, Layers
 } from 'lucide-react';
+
 
 // Live SLA Countdown Timer Component
 const SLATimer = ({ deadline, status, isEscalated, escalatedTo }) => {
@@ -147,7 +149,6 @@ const departmentsList = [
   'IT Department',
   'Maintenance Department',
   'Student Welfare / Anti-Ragging Committee',
-  'Academic Office / OD Cell',
   'Canteen & Hospitality',
   'Higher Authority (Principal & Campus Security Management)',
   'General Administration'
@@ -181,6 +182,7 @@ const ComplaintDetails = () => {
   const [adminRemarks, setAdminRemarks] = useState('');
   const [resolutionRemarks, setResolutionRemarks] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [isCertModalOpen, setIsCertModalOpen] = useState(false);
 
   // Responsible Officer Form State
   const [officerName, setOfficerName] = useState('');
@@ -188,6 +190,15 @@ const ComplaintDetails = () => {
   const [officerContact, setOfficerContact] = useState('');
   const [officerEmail, setOfficerEmail] = useState('');
   const [assigningOfficer, setAssigningOfficer] = useState(false);
+  const [notifyingOfficer, setNotifyingOfficer] = useState(false);
+
+  // Novelty 2: Recommended Officers State
+  const [recommendedOfficers, setRecommendedOfficers] = useState([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+
+  // Novelty 5: Student Confirmation State
+  const [confirmingResolved, setConfirmingResolved] = useState(false);
 
   // Student feedback states
   const [rating, setRating] = useState(5);
@@ -272,6 +283,23 @@ const ComplaintDetails = () => {
     }
   };
 
+  const handleNotifyOfficer = async () => {
+    setNotifyingOfficer(true);
+    setError('');
+    try {
+      const res = await api.notifyOfficer(complaint._id);
+      addToast(`📧 Email notification sent to ${complaint.assignedOfficer?.email}!`, 'success');
+      // Refresh complaint to reflect notified status + timestamp
+      await loadComplaintDetails();
+    } catch (err) {
+      const msg = err.message || 'Failed to send notification email.';
+      setError(msg);
+      addToast(msg, 'error');
+    } finally {
+      setNotifyingOfficer(false);
+    }
+  };
+
   const handleFeedbackSubmit = async (e) => {
     e.preventDefault();
     setSubmittingFeedback(true);
@@ -314,6 +342,50 @@ const ComplaintDetails = () => {
       setError(err.message || 'Failed to reopen complaint.');
       addToast('Failed to reopen complaint.', 'error');
       setLoading(false);
+    }
+  };
+
+  // Novelty 2: Recommend Officers Handler
+  const handleGetRecommendations = async () => {
+    setLoadingRecommendations(true);
+    try {
+      const res = await api.getRecommendedOfficers(complaint._id);
+      setRecommendedOfficers(res.officers || []);
+      setShowRecommendations(true);
+      if (res.recommended) {
+        addToast(`🤖 Top Match: ${res.recommended.name} (Score: ${res.recommended.score.toFixed(1)})`, 'info');
+      }
+    } catch (err) {
+      addToast(err.message || 'Failed to fetch recommendations.', 'error');
+    } finally {
+      setLoadingRecommendations(false);
+    }
+  };
+
+  const handleSelectOfficer = (officer) => {
+    setOfficerName(officer.name);
+    setOfficerRole(officer.role || 'Department Officer');
+    setOfficerContact(officer.contact || '');
+    setOfficerEmail(officer.email || '');
+    addToast(`Selected ${officer.name}. Click 'Assign Officer' to save.`, 'success');
+  };
+
+  // Novelty 5: Student Confirm Resolution Handler
+  const handleConfirmResolved = async (e) => {
+    if (e) e.preventDefault();
+    setConfirmingResolved(true);
+    setError('');
+    setSuccess('');
+    try {
+      await api.confirmResolved(complaint._id, rating, comment);
+      addToast('✅ Grievance verified and confirmed resolved!', 'success');
+      setSuccess('Thank you! Resolution confirmed and closed.');
+      await loadComplaintDetails();
+    } catch (err) {
+      setError(err.message || 'Failed to confirm resolution.');
+      addToast(err.message || 'Failed to confirm resolution.', 'error');
+    } finally {
+      setConfirmingResolved(false);
     }
   };
 
@@ -369,16 +441,71 @@ const ComplaintDetails = () => {
       {/* Title & Priority Header */}
       <div className="dashboard-header" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
             <span style={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
               {complaint.complaintId}
             </span>
             <span className={getPriorityBadgeClass(complaint.priority)}>{complaint.priority}</span>
             <span className={getStatusBadgeClass(complaint.status)}>{complaint.status}</span>
+            {complaint.confidencePercent > 0 && (
+              <span className="badge" style={{ background: 'rgba(6,182,212,0.15)', color: 'var(--accent-cyan)', border: '1px solid rgba(6,182,212,0.3)', fontSize: '0.75rem' }}>
+                🎯 {complaint.confidencePercent}% Confidence
+              </span>
+            )}
+            {complaint.isDuplicate && (
+              <span className="badge" style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.3)', fontSize: '0.75rem' }}>
+                🔗 Clustered Duplicate
+              </span>
+            )}
+            {complaint.affectedStudentCount > 1 && (
+              <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', fontSize: '0.75rem' }}>
+                👥 {complaint.affectedStudentCount} Students Affected
+              </span>
+            )}
+            {complaint.reopenCount > 0 && (
+              <span className="badge" style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)', fontSize: '0.75rem' }}>
+                ⚠️ Reopened ×{complaint.reopenCount} {complaint.reopenCount >= 2 ? '(Auto-Escalated)' : ''}
+              </span>
+            )}
           </div>
           <h2>{complaint.title}</h2>
         </div>
       </div>
+
+      {/* Duplicate Cluster Notice */}
+      {complaint.isDuplicate && (
+        <div className="alert-box alert-info" style={{ borderLeft: '4px solid var(--accent-blue)', background: 'rgba(59, 130, 246, 0.08)', marginBottom: '1rem' }}>
+          <Layers size={18} color="var(--accent-blue)" />
+          <div>
+            <strong>CLUSTERED DUPLICATE GRIEVANCE:</strong> This grievance shares context and location with an ongoing campus issue
+            {complaint.parentComplaintId && (
+              <> (Parent ID: <strong>{complaint.parentComplaintId.complaintId || complaint.parentComplaintId}</strong>)</>
+            )}. Linked automatically to streamline departmental resolution.
+          </div>
+        </div>
+      )}
+
+      {/* 48-Hour Resolution Expiry Banner for Students */}
+      {complaint.status === 'RESOLVED' && (
+        <div style={{
+          padding: '0.85rem 1rem',
+          background: 'rgba(34, 197, 94, 0.08)',
+          border: '1px solid rgba(34, 197, 94, 0.3)',
+          borderRadius: '8px',
+          marginBottom: '1rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem'
+        }}>
+          <Clock size={20} color="var(--status-resolved)" style={{ flexShrink: 0 }} />
+          <div style={{ fontSize: '0.85rem' }}>
+            <strong style={{ color: 'var(--status-resolved)', display: 'block' }}>⏱️ 48-Hour Resolution Verification Loop Active</strong>
+            <span style={{ color: 'var(--text-secondary)' }}>
+              Please verify if your grievance was solved properly. If not confirmed or rated within 48 hours, the system will automatically reopen the ticket.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* SLA Countdown Timer & Auto-Escalation Callout */}
       <SLATimer 
@@ -513,6 +640,60 @@ const ComplaintDetails = () => {
                     <Mail size={13} /> {complaint.assignedOfficer.email || 'department@scgrs.edu'}
                   </div>
                 </div>
+
+                {/* Notification Status Row - Admin only */}
+                {user?.role === 'admin' && complaint.assignedOfficer.email && (
+                  <div style={{ gridColumn: '1 / -1', paddingTop: '0.75rem', borderTop: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+                    {complaint.assignedOfficer.notified ? (
+                      <>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                          background: 'rgba(34,197,94,0.1)',
+                          color: '#4ade80',
+                          border: '1px solid rgba(34,197,94,0.3)',
+                          borderRadius: '20px',
+                          padding: '0.3rem 0.85rem',
+                          fontSize: '0.8rem',
+                          fontWeight: 700
+                        }}>
+                          <CheckCircle2 size={13} /> Notified ✅
+                          <span style={{ fontWeight: 400, opacity: 0.75, fontSize: '0.75rem' }}>
+                            &mdash;&nbsp;
+                            {new Date(complaint.assignedOfficer.notifiedAt).toLocaleString('en-IN', {
+                              day: '2-digit', month: 'short', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit'
+                            })}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          disabled={notifyingOfficer}
+                          onClick={handleNotifyOfficer}
+                          style={{ padding: '0.3rem 0.8rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', borderColor: 'rgba(6,182,212,0.35)', color: 'var(--accent-cyan)' }}
+                        >
+                          <Send size={12} /> {notifyingOfficer ? 'Sending…' : 'Resend Email'}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-blue"
+                        disabled={notifyingOfficer}
+                        onClick={handleNotifyOfficer}
+                        style={{ padding: '0.4rem 1rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                      >
+                        <Send size={14} />
+                        {notifyingOfficer ? 'Sending Email…' : 'Notify Officer 📧'}
+                      </button>
+                    )}
+                    {!complaint.assignedOfficer.notified && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                        Officer has not been emailed yet.
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>
@@ -546,16 +727,43 @@ const ComplaintDetails = () => {
                 </span>
               </div>
               <div>
-                <div className="detail-meta-label">AI Confidence Score</div>
+                <div className="detail-meta-label">Deterministic Confidence</div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-cyan)', marginTop: '0.15rem' }}>
-                  {(complaint.priorityScore * 100).toFixed(0)}% Confidence
+                  {complaint.confidencePercent ? `${complaint.confidencePercent}%` : `${(complaint.priorityScore * 100).toFixed(0)}%`}
                 </div>
               </div>
             </div>
 
+            {/* Matched Severity Keywords (Novelty 1) */}
+            {complaint.matchedKeywords && complaint.matchedKeywords.length > 0 && (
+              <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '0.85rem', marginBottom: '0.85rem' }}>
+                <div className="detail-meta-label" style={{ marginBottom: '0.4rem' }}>
+                  🎯 Matched Severity Keywords (Weight Breakdown)
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {complaint.matchedKeywords.map((kw, idx) => (
+                    <span
+                      key={idx}
+                      style={{
+                        background: 'rgba(6, 182, 212, 0.12)',
+                        color: 'var(--accent-cyan)',
+                        border: '1px solid rgba(6, 182, 212, 0.3)',
+                        borderRadius: '12px',
+                        padding: '3px 10px',
+                        fontSize: '0.8rem',
+                        fontWeight: 600
+                      }}
+                    >
+                      🏷️ {kw}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Extracted Trigger Keywords */}
             {complaint.priorityReason && (
-              <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+              <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '0.85rem' }}>
                 <div className="detail-meta-label" style={{ marginBottom: '0.35rem' }}>AI Urgency & Context Explanation</div>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.5' }}>
                   {complaint.priorityReason}
@@ -563,131 +771,6 @@ const ComplaintDetails = () => {
               </div>
             )}
           </div>
-
-          {/* OD Form Approval & Verification Card */}
-          {(complaint.category === 'OD Form Issue' || complaint.eventName) && (
-            <div className="glass-card" style={{ border: '1px solid rgba(6, 182, 212, 0.3)', background: 'rgba(6, 182, 212, 0.02)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', margin: 0, color: 'var(--accent-cyan)' }}>
-                  <FileText size={20} /> On-Duty (OD) Approval & Verification Details
-                </h3>
-                <span className="badge badge-status-assigned" style={{ fontSize: '0.75rem', background: 'rgba(6, 182, 212, 0.15)', color: 'var(--accent-cyan)' }}>
-                  🎓 Academic OD Lifecycle
-                </span>
-              </div>
-
-              {/* Event Meta */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
-                <div>
-                  <div className="detail-meta-label">Event / Competition</div>
-                  <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)', marginTop: '0.15rem' }}>
-                    {complaint.eventName || 'N/A'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="detail-meta-label">Event Date</div>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem', marginTop: '0.15rem' }}>
-                    {complaint.eventDate ? new Date(complaint.eventDate).toLocaleDateString() : 'N/A'}
-                    {complaint.eventDate && new Date(complaint.eventDate) < new Date() && (
-                      <span className="badge badge-priority-high" style={{ marginLeft: '0.4rem', fontSize: '0.65rem' }}>
-                        ⚠️ Event Date Passed
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="detail-meta-label">Faculty In-Charge</div>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                    {complaint.facultyInChargeName || 'Not specified'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="detail-meta-label">OD Form Status</div>
-                  <div style={{ marginTop: '0.15rem' }}>
-                    <span className={`badge badge-status-${(complaint.odFormStatus || 'PENDING').toLowerCase()}`}>
-                      {(complaint.odFormStatus || 'PENDING_APPROVAL').replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Signature Workflow Bottleneck Visualizer */}
-              <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <AlertCircle size={14} color="var(--priority-medium)" /> Multi-Stage Signature Tracking
-                </h4>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem' }}>
-                  {[
-                    { id: 'MENTOR', label: '1. Mentor Sign', name: complaint.mentorName },
-                    { id: 'CLASS_COUNSELLOR', label: '2. Class Counsellor', name: complaint.classCounsellorName },
-                    { id: 'HOD', label: '3. HOD Approval', name: complaint.hodName },
-                    { id: 'ACADEMIC_CELL', label: '4. Academic Cell', name: 'OD Cell Admin' }
-                  ].map((stage) => {
-                    const isStuck = complaint.pendingApprovalFrom === stage.id;
-                    return (
-                      <div key={stage.id} style={{ 
-                        padding: '0.6rem', 
-                        borderRadius: '6px', 
-                        background: isStuck ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.02)',
-                        border: `1px solid ${isStuck ? 'var(--priority-medium)' : 'var(--border-color)'}`
-                      }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: isStuck ? 'var(--priority-medium)' : 'var(--text-secondary)' }}>
-                          {stage.label}
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                          {stage.name || 'Not assigned'}
-                        </div>
-                        {isStuck && (
-                          <div style={{ fontSize: '0.65rem', color: 'var(--priority-medium)', fontWeight: 700, marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                            <Clock size={11} /> STUCK HERE
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Fake OD Guard Proof Verification */}
-              <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div style={{ padding: '0.85rem', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--status-resolved)', fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                    <ShieldCheck size={16} /> Genuine OD Proof Verification
-                  </div>
-                  {complaint.verificationProof ? (
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.4rem' }}>
-                      <Paperclip size={14} /> 
-                      <span style={{ wordBreak: 'break-all' }}>{complaint.verificationProof}</span>
-                      <span className="badge badge-status-resolved" style={{ fontSize: '0.65rem' }}>Verified Attached</span>
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: '0.8rem', color: 'var(--priority-medium)', marginTop: '0.25rem' }}>
-                      ⚠️ No verification proof attached. Faculty should verify event details before approval to prevent fake ODs.
-                    </p>
-                  )}
-                </div>
-
-                {/* Class Presentation & Return Tracker */}
-                <div style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-blue)', fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                    <Presentation size={16} /> Post-Event Return & Class Presentation
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>
-                    Status: <strong style={{ color: 'var(--text-primary)' }}>{(complaint.eventReturnStatus || 'NOT_RETURNED').replace(/_/g, ' ')}</strong>
-                  </div>
-                  {complaint.presentationRemarks && (
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontStyle: 'italic' }}>
-                      Remarks: "{complaint.presentationRemarks}"
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Canteen Dish Issue Inspection Card */}
           {(complaint.category === 'Canteen Dish Issue' || complaint.dishName) && (
@@ -853,9 +936,68 @@ const ComplaintDetails = () => {
           {/* Assign Responsible Officer (Admin Panel) */}
           {user.role === 'admin' && (
             <div className="glass-card" style={{ border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-              <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.05rem' }}>
-                <UserCheck size={18} color="var(--accent-cyan)" /> Assign Responsible Officer
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.05rem' }}>
+                  <UserCheck size={18} color="var(--accent-cyan)" /> Assign Responsible Officer
+                </h3>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={handleGetRecommendations}
+                  disabled={loadingRecommendations}
+                  style={{ padding: '0.25rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)' }}
+                >
+                  <Sparkles size={13} /> {loadingRecommendations ? 'Ranking...' : '🤖 Recommend Officer'}
+                </button>
+              </div>
+
+              {/* Novelty 2: Recommended Officers List */}
+              {showRecommendations && (
+                <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'rgba(6, 182, 212, 0.05)', borderRadius: '8px', border: '1px solid rgba(6, 182, 212, 0.25)' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-cyan)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>🏆 Performance-Ranked Officers</span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>score = (10-tickets) + (★×2)</span>
+                  </div>
+                  {recommendedOfficers.length === 0 ? (
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>No officers found for this department.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '200px', overflowY: 'auto' }}>
+                      {recommendedOfficers.map((o, idx) => (
+                        <div
+                          key={o._id}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '0.45rem 0.65rem',
+                            background: idx === 0 ? 'rgba(6, 182, 212, 0.12)' : 'rgba(255,255,255,0.03)',
+                            borderRadius: '6px',
+                            border: idx === 0 ? '1px solid rgba(6, 182, 212, 0.4)' : '1px solid transparent'
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                              {idx === 0 && '⭐ Top Match: '}{o.name}
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                              Score: <strong style={{ color: 'var(--accent-cyan)' }}>{o.score.toFixed(1)}</strong> | Open: {o.openTicketCount} | Rating: ★{o.avgRating}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-outline"
+                            onClick={() => handleSelectOfficer(o)}
+                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)' }}
+                          >
+                            Select
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <form onSubmit={handleAssignOfficerSubmit}>
                 <div className="form-group" style={{ marginBottom: '0.85rem' }}>
                   <label style={{ fontSize: '0.75rem' }}>Officer Name</label>
@@ -906,6 +1048,54 @@ const ComplaintDetails = () => {
                 >
                   {assigningOfficer ? 'Assigning...' : 'Assign Officer'}
                 </button>
+
+                {/* Notify button shown below the form once officer is assigned */}
+                {complaint.assignedOfficer?.name && complaint.assignedOfficer?.email && (
+                  <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px dashed var(--border-color)' }}>
+                    {complaint.assignedOfficer.notified ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                          background: 'rgba(34,197,94,0.1)',
+                          color: '#4ade80',
+                          border: '1px solid rgba(34,197,94,0.3)',
+                          borderRadius: '20px',
+                          padding: '0.3rem 0.75rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 700
+                        }}>
+                          <CheckCircle2 size={12} /> Notified ✅&nbsp;
+                          <span style={{ fontWeight: 400, opacity: 0.75, fontSize: '0.72rem' }}>
+                            {new Date(complaint.assignedOfficer.notifiedAt).toLocaleString('en-IN', {
+                              day: '2-digit', month: 'short',
+                              hour: '2-digit', minute: '2-digit'
+                            })}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          disabled={notifyingOfficer}
+                          onClick={handleNotifyOfficer}
+                          style={{ width: '100%', fontSize: '0.8rem', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: 'rgba(6,182,212,0.35)', color: 'var(--accent-cyan)' }}
+                        >
+                          <Send size={13} /> {notifyingOfficer ? 'Sending…' : 'Resend Notification'}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-blue"
+                        disabled={notifyingOfficer}
+                        onClick={handleNotifyOfficer}
+                        style={{ width: '100%', fontSize: '0.85rem', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'linear-gradient(135deg, rgba(6,182,212,0.25), rgba(59,130,246,0.25))', border: '1px solid rgba(6,182,212,0.5)' }}
+                      >
+                        <Send size={14} />
+                        {notifyingOfficer ? 'Sending Email…' : '📧 Notify Officer via Email'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </form>
             </div>
           )}
@@ -1014,10 +1204,10 @@ const ComplaintDetails = () => {
                       </p>
                     </div>
                   ) : (
-                    /* Feedback submission form */
-                    <form onSubmit={handleFeedbackSubmit}>
-                      <div className="form-group">
-                        <label>How was your complaint handled?</label>
+                    /* Verification & Feedback submission form (Novelty 5) */
+                    <div>
+                      <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                        <label style={{ fontSize: '0.82rem', fontWeight: 600 }}>Rate the resolution satisfaction:</label>
                         <div className="rating-selector">
                           {[1, 2, 3, 4, 5].map(star => (
                             <button
@@ -1034,39 +1224,47 @@ const ComplaintDetails = () => {
                         </div>
                       </div>
 
-                      <div className="form-group">
-                        <label htmlFor="feedback-comment">Comments / Feedback</label>
+                      <div className="form-group" style={{ marginBottom: '1rem' }}>
+                        <label htmlFor="feedback-comment" style={{ fontSize: '0.8rem' }}>Verification Notes / Feedback (Optional)</label>
                         <textarea
                           id="feedback-comment"
                           className="form-control"
-                          rows="3"
-                          placeholder="e.g. The issue was resolved quickly and the staff member was very helpful."
+                          rows="2"
+                          placeholder="e.g. Verified on site, equipment is now working smoothly."
                           value={comment}
                           onChange={(e) => setComment(e.target.value)}
                         />
                       </div>
 
-                      <button 
-                        type="submit" 
-                        className="btn btn-green" 
-                        style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1rem' }}
-                        disabled={submittingFeedback}
-                      >
-                        Submit Feedback
-                      </button>
-                    </form>
-                  )}
+                      {/* Novelty 5 Action Buttons */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginBottom: '0.75rem' }}>
+                        <button 
+                          type="button" 
+                          className="btn btn-green" 
+                          style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '0.5rem', fontWeight: 700 }}
+                          onClick={handleConfirmResolved}
+                          disabled={confirmingResolved}
+                        >
+                          <CheckCircle size={16} />
+                          {confirmingResolved ? 'Verifying...' : '✅ Confirm Fixed'}
+                        </button>
 
-                  {/* Reopen Action button */}
-                  <button 
-                    type="button" 
-                    className="btn btn-red" 
-                    style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '0.5rem' }}
-                    onClick={handleReopen}
-                  >
-                    <RefreshCcw size={16} />
-                    Reopen Complaint
-                  </button>
+                        <button 
+                          type="button" 
+                          className="btn btn-red" 
+                          style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '0.5rem' }}
+                          onClick={handleReopen}
+                        >
+                          <RefreshCcw size={16} />
+                          ❌ Still Not Fixed (Reopen)
+                        </button>
+                      </div>
+
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', margin: '0.5rem 0 0 0' }}>
+                        ⏱️ 48-Hour Auto-Reopen: Tickets unverified after 48h will automatically reopen.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1102,6 +1300,8 @@ const ComplaintDetails = () => {
           )}
         </div>
       </div>
+
+      {/* JPG Certificate Modal Lightbox - removed (OD feature deleted) */}
     </div>
   );
 };

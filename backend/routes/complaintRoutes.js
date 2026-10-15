@@ -29,56 +29,61 @@ router.post('/ai/analyze', verifyToken, async (req, res) => {
       console.warn('AI Service is offline, running local fallback analysis.', aiError.message);
 
       // Local JS fallback (mirrors priority_engine.py logic)
-      const lowercaseText = text.toLowerCase();
+      const KEYWORD_WEIGHTS = [
+        { word: "harassment", weight: 40 }, { word: "ragging", weight: 40 }, { word: "threat", weight: 40 },
+        { word: "violence", weight: 40 }, { word: "assault", weight: 40 }, { word: "emergency", weight: 40 },
+        { word: "bully", weight: 35 }, { word: "abuse", weight: 40 }, { word: "suicidal", weight: 40 },
+        { word: "cockroach", weight: 40 }, { word: "foreign object", weight: 40 }, { word: "fire", weight: 40 },
+        { word: "exam issue", weight: 25 }, { word: "exam", weight: 25 }, { word: "fees", weight: 25 },
+        { word: "hygiene", weight: 25 }, { word: "stale food", weight: 25 }, { word: "food poisoning", weight: 35 },
+        { word: "repeated", weight: 15 }, { word: "water problem", weight: 15 }, { word: "wifi", weight: 15 },
+        { word: "speed", weight: 15 }, { word: "canteen", weight: 15 }, { word: "bus", weight: 15 },
+        { word: "fan", weight: 10 }, { word: "light", weight: 10 }, { word: "cleanliness", weight: 10 }
+      ];
 
-      const criticalWords = ["harassment", "ragging", "threat", "violence", "safety", "assault", "emergency", "bully", "abuse", "suicidal", "afraid", "scared"];
-      const highWords = ["exam issue", "academic emergency", "repeated complaint", "fees", "hall ticket", "grade", "results", "leaking", "flood", "broken door"];
-      const mediumWords = ["repeated", "internet problem", "water problem", "hostel issue", "transport delay", "wifi", "wi-fi", "speed", "mess", "canteen", "bus", "network"];
-      const lowWords = ["fan", "light", "minor", "suggestion", "classroom equipment", "bulb", "switch", "cleanliness"];
-
-      let priority = "LOW";
-      let score = 0.20;
-      let matchedWord = null;
-
-      for (const word of criticalWords) {
-        if (lowercaseText.includes(word)) { priority = "CRITICAL"; score = 0.85; matchedWord = word; break; }
-      }
-      if (priority === "LOW") {
-        for (const word of highWords) {
-          if (lowercaseText.includes(word)) { priority = "HIGH"; score = 0.65; matchedWord = word; break; }
-        }
-      }
-      if (priority === "LOW") {
-        for (const word of mediumWords) {
-          if (lowercaseText.includes(word)) { priority = "MEDIUM"; score = 0.45; matchedWord = word; break; }
-        }
-      }
-      if (priority === "LOW") {
-        for (const word of lowWords) {
-          if (lowercaseText.includes(word)) { priority = "LOW"; score = 0.25; matchedWord = word; break; }
+      let totalScore = 0;
+      const matchedKeywords = [];
+      const seen = new Set();
+      for (const item of KEYWORD_WEIGHTS) {
+        if (lowercaseText.includes(item.word) && !seen.has(item.word)) {
+          seen.add(item.word);
+          totalScore += item.weight;
+          matchedKeywords.push(`${item.word} (+${item.weight})`);
         }
       }
 
       const negWords = ["not", "bad", "worst", "broken", "terrible", "unsafe", "scared", "afraid", "harassed", "fail", "delay", "poor", "unhappy", "angry", "frustrated"];
       const negCount = negWords.filter(w => lowercaseText.includes(w)).length;
       const sentiment = negCount > 0 ? "NEGATIVE" : "NEUTRAL";
-      if (sentiment === "NEGATIVE") score = Math.min(0.99, score + 0.10);
+      if (sentiment === "NEGATIVE" && totalScore > 0) totalScore += 10;
+      if (matchedKeywords.length === 0) totalScore = 5;
 
-      // Reclassify after sentiment adjustment
-      if (score >= 0.80) priority = "CRITICAL";
-      else if (score >= 0.60) priority = "HIGH";
-      else if (score >= 0.40) priority = "MEDIUM";
+      let priority = "LOW";
+      if (totalScore >= 80) priority = "CRITICAL";
+      else if (totalScore >= 60) priority = "HIGH";
+      else if (totalScore >= 40) priority = "MEDIUM";
 
-      const reason = matchedWord
-        ? `Urgency keyword '${matchedWord}' detected. ${sentiment === "NEGATIVE" ? "Negative sentiment identified." : ""} (Fallback Mode - AI Service offline)`
-        : `General context detected. ${sentiment === "NEGATIVE" ? "Negative sentiment identified." : ""} (Fallback Mode - AI Service offline)`;
+      const confidencePercent = Math.min(100, Math.max(5, Math.round(totalScore)));
+      const reason = matchedKeywords.length > 0
+        ? `Matched keywords: ${matchedKeywords.join(', ')}.`
+        : `General context detected.`;
 
-      return res.status(200).json({ priority, score: Math.round(score * 100) / 100, sentiment, reason });
+      return res.status(200).json({
+        priority,
+        score: Math.round(confidencePercent) / 100,
+        confidencePercent,
+        matchedKeywords,
+        sentiment,
+        reason: `${confidencePercent}% — ${priority} — ${reason}`
+      });
     }
   } catch (error) {
     res.status(500).json({ message: 'AI Analysis proxy failed.', error: error.message });
   }
 });
+
+// Novelty 4: Accountability trail endpoint (must come before /:id)
+router.get('/accountability', verifyToken, isAdmin, complaintController.getDepartmentAccountability);
 
 // Root complaint routes
 router.post('/', verifyToken, isStudent, complaintController.createComplaint);
@@ -87,9 +92,11 @@ router.get('/', verifyToken, complaintController.getComplaints);
 // Wildcard /:id routes — must be LAST
 router.get('/:id', verifyToken, complaintController.getComplaintById);
 router.post('/:id/feedback', verifyToken, isStudent, complaintController.submitFeedback);
+router.post('/:id/confirm-resolved', verifyToken, isStudent, complaintController.confirmResolved);
 router.post('/:id/reopen', verifyToken, isStudent, complaintController.reopenComplaint);
 router.put('/:id/status', verifyToken, isAdmin, complaintController.updateStatus);
 router.put('/:id/department', verifyToken, isAdmin, complaintController.updateDepartment);
 router.put('/:id/assign', verifyToken, isAdmin, complaintController.assignOfficer);
+router.put('/:id/notify-officer', verifyToken, isAdmin, complaintController.notifyOfficer);
 
 module.exports = router;

@@ -13,7 +13,6 @@ const ComplaintChatbot = ({ formData, updateFormData, onSubmit, onSwitchToQuick,
       text: "Hello! I am your AI Campus Grievance Assistant. 👋 Tell me what issue or problem you are facing on campus today?",
       quickReplies: [
         "Food/hygiene issue in canteen",
-        "OD form signature delayed",
         "Wi-Fi / Internet connection down",
         "Hostel room maintenance issue"
       ]
@@ -104,8 +103,6 @@ const ComplaintChatbot = ({ formData, updateFormData, onSubmit, onSwitchToQuick,
     } else if (step === 1) {
       if (formData.category === 'Canteen Dish Issue') {
         updateFormData({ canteenLocation: textToSend, locationName: textToSend });
-      } else if (formData.category === 'OD Form Issue') {
-        updateFormData({ eventName: textToSend });
       } else {
         updateFormData({ locationName: textToSend });
       }
@@ -127,7 +124,7 @@ const ComplaintChatbot = ({ formData, updateFormData, onSubmit, onSwitchToQuick,
         setStep(2);
       }, 700);
 
-    // Step 2: User answers follow-up 2 (dish name / OD pending / anonymous)
+    // Step 2: User answers follow-up 2 (dish name / anonymous)
     } else if (step === 2) {
       if (formData.category === 'Canteen Dish Issue') {
         updateFormData({ dishName: textToSend });
@@ -138,11 +135,6 @@ const ComplaintChatbot = ({ formData, updateFormData, onSubmit, onSwitchToQuick,
           updateFormData({ issueType: 'HYGIENE' });
           triggerAiAnalysis(formData.description, 'Canteen Dish Issue', 'HYGIENE');
         }
-      } else if (formData.category === 'OD Form Issue') {
-        if (textToSend.includes('1.') || textToSend.toLowerCase().includes('mentor')) updateFormData({ pendingApprovalFrom: 'MENTOR' });
-        else if (textToSend.includes('2.') || textToSend.toLowerCase().includes('counsellor')) updateFormData({ pendingApprovalFrom: 'CLASS_COUNSELLOR' });
-        else if (textToSend.includes('3.') || textToSend.toLowerCase().includes('hod')) updateFormData({ pendingApprovalFrom: 'HOD' });
-        else if (textToSend.includes('4.') || textToSend.toLowerCase().includes('cell')) updateFormData({ pendingApprovalFrom: 'ACADEMIC_CELL' });
       }
 
       // Ask Anonymous Question (Step 3)
@@ -190,7 +182,7 @@ const ComplaintChatbot = ({ formData, updateFormData, onSubmit, onSwitchToQuick,
         text: targetStep === 0 
           ? "No problem! Please re-describe your main issue or complaint."
           : "Sure thing! Update your answer for this step below.",
-        quickReplies: targetStep === 0 ? ["Food issue in canteen", "OD form delay", "Wi-Fi issue"] : []
+        quickReplies: targetStep === 0 ? ["Food issue in canteen", "Wi-Fi issue"] : []
       }
     ]);
   };

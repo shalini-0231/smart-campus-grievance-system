@@ -32,7 +32,6 @@ const ComplaintSchema = new mongoose.Schema({
       'Harassment',
       'Ragging',
       'Safety',
-      'OD Form Issue',
       'Canteen Dish Issue',
       'Other'
     ]
@@ -71,7 +70,9 @@ const ComplaintSchema = new mongoose.Schema({
     name: { type: String, default: '' },
     role: { type: String, default: '' },
     contact: { type: String, default: '' },
-    email: { type: String, default: '' }
+    email: { type: String, default: '' },
+    notified: { type: Boolean, default: false },
+    notifiedAt: { type: Date, default: null }
   },
   status: {
     type: String,
@@ -104,53 +105,7 @@ const ComplaintSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
-  // OD Form specific fields
-  eventName: {
-    type: String,
-    default: ''
-  },
-  eventDate: {
-    type: Date
-  },
-  facultyInChargeName: {
-    type: String,
-    default: ''
-  },
-  mentorName: {
-    type: String,
-    default: ''
-  },
-  classCounsellorName: {
-    type: String,
-    default: ''
-  },
-  hodName: {
-    type: String,
-    default: ''
-  },
-  pendingApprovalFrom: {
-    type: String,
-    enum: ['MENTOR', 'CLASS_COUNSELLOR', 'HOD', 'ACADEMIC_CELL', 'NONE_APPROVED', ''],
-    default: ''
-  },
-  odFormStatus: {
-    type: String,
-    enum: ['NOT_SUBMITTED', 'PENDING_APPROVAL', 'REJECTED', 'APPROVED_NOT_UPDATED', ''],
-    default: ''
-  },
-  verificationProof: {
-    type: String,
-    default: ''
-  },
-  eventReturnStatus: {
-    type: String,
-    enum: ['NOT_RETURNED', 'RETURNED_PENDING_PRESENTATION', 'PRESENTATION_COMPLETED', ''],
-    default: ''
-  },
-  presentationRemarks: {
-    type: String,
-    default: ''
-  },
+  // Canteen Dish Issue specific fields start below
   // Canteen Dish Issue specific fields
   canteenLocation: {
     type: String,
@@ -173,6 +128,41 @@ const ComplaintSchema = new mongoose.Schema({
   dishPhoto: {
     type: String,
     default: ''
+  },
+
+  // ── Novelty 1: Explainable Priority Engine ─────────────────────────────────
+  matchedKeywords: {
+    type: [String],
+    default: []
+  },
+  confidencePercent: {
+    type: Number,
+    default: 0
+  },
+
+  // ── Novelty 3: Duplicate Clustering ────────────────────────────────────────
+  parentComplaintId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Complaint',
+    default: null
+  },
+  isDuplicate: {
+    type: Boolean,
+    default: false
+  },
+  affectedStudentCount: {
+    type: Number,
+    default: 1
+  },
+
+  // ── Novelty 5: Verified Resolution Loop ────────────────────────────────────
+  resolvedAt: {
+    type: Date,
+    default: null
+  },
+  reopenCount: {
+    type: Number,
+    default: 0
   }
 }, {
   timestamps: true

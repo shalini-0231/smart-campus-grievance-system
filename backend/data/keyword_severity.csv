@@ -1,0 +1,64 @@
+keyword,category,department,severity_weight
+harassment,Harassment,Student Welfare / Anti-Ragging Committee,40
+ragging,Ragging,Student Welfare / Anti-Ragging Committee,40
+threat,Safety,Student Welfare / Anti-Ragging Committee,40
+violence,Safety,Student Welfare / Anti-Ragging Committee,40
+assault,Safety,Student Welfare / Anti-Ragging Committee,40
+emergency,Safety,Student Welfare / Anti-Ragging Committee,40
+bully,Safety,Student Welfare / Anti-Ragging Committee,35
+abuse,Safety,Student Welfare / Anti-Ragging Committee,40
+suicidal,Safety,Student Welfare / Anti-Ragging Committee,40
+weapon,Safety,Student Welfare / Anti-Ragging Committee,40
+steal,Safety,Student Welfare / Anti-Ragging Committee,30
+theft,Safety,Student Welfare / Anti-Ragging Committee,30
+safety,Safety,Student Welfare / Anti-Ragging Committee,35
+unsafe,Safety,Student Welfare / Anti-Ragging Committee,25
+scared,Safety,Student Welfare / Anti-Ragging Committee,25
+afraid,Safety,Student Welfare / Anti-Ragging Committee,25
+cockroach,Canteen Dish Issue,Canteen & Hospitality,40
+foreign object,Canteen Dish Issue,Canteen & Hospitality,40
+poison,Canteen Dish Issue,Canteen & Hospitality,40
+food poisoning,Canteen Dish Issue,Canteen & Hospitality,35
+hygiene,Canteen Dish Issue,Canteen & Hospitality,25
+stale food,Canteen Dish Issue,Canteen & Hospitality,25
+dirty food,Canteen Dish Issue,Canteen & Hospitality,25
+unhygienic,Canteen Dish Issue,Canteen & Hospitality,25
+mess,Canteen Dish Issue,Canteen & Hospitality,15
+canteen,Canteen Dish Issue,Canteen & Hospitality,15
+dish,Canteen Dish Issue,Canteen & Hospitality,15
+fire,Infrastructure,Maintenance Department,40
+flood,Infrastructure,Maintenance Department,30
+leaking,Infrastructure,Maintenance Department,25
+broken door,Infrastructure,Maintenance Department,25
+broken,Infrastructure,Maintenance Department,15
+fan,Infrastructure,Maintenance Department,10
+light,Infrastructure,Maintenance Department,10
+bulb,Infrastructure,Maintenance Department,10
+switch,Infrastructure,Maintenance Department,10
+dust,Infrastructure,Maintenance Department,10
+dirt,Infrastructure,Maintenance Department,10
+table,Infrastructure,Maintenance Department,10
+chair,Infrastructure,Maintenance Department,10
+academic emergency,Academic,Academic Department,30
+exam issue,Academic,Academic Department,25
+exam,Academic,Academic Department,25
+fees,Academic,Academic Department,25
+hall ticket,Academic,Academic Department,25
+grade,Academic,Academic Department,25
+results,Academic,Academic Department,25
+attendance,Academic,Academic Department,15
+water problem,Hostel,Hostel Administration,15
+hostel issue,Hostel,Hostel Administration,15
+cleanliness,Hostel,Hostel Administration,10
+internet problem,Internet/Wi-Fi,IT Department,15
+wifi,Internet/Wi-Fi,IT Department,15
+wi-fi,Internet/Wi-Fi,IT Department,15
+speed,Internet/Wi-Fi,IT Department,15
+network,Internet/Wi-Fi,IT Department,15
+connectivity,Internet/Wi-Fi,IT Department,15
+transport delay,Transport,Transport Department,15
+bus,Transport,Transport Department,15
+delay,Transport,Transport Department,15
+repeated,General,General Administration,15
+minor,General,General Administration,10
+suggestion,General,General Administration,10

@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { Send, AlertTriangle, ArrowLeft, Brain, Sparkles, FileText, CheckCircle2, ShieldCheck, Presentation } from 'lucide-react';
+import { 
+  Send, AlertTriangle, ArrowLeft, Brain, Sparkles, FileText, CheckCircle2
+} from 'lucide-react';
 
 const categories = [
   'Academic',
@@ -13,7 +15,6 @@ const categories = [
   'Harassment',
   'Ragging',
   'Safety',
-  'OD Form Issue',
   'Canteen Dish Issue',
   'Other'
 ];
@@ -28,7 +29,6 @@ const getTargetDepartment = (cat) => {
     case 'Harassment':
     case 'Ragging':
     case 'Safety': return 'Student Welfare / Anti-Ragging Committee';
-    case 'OD Form Issue': return 'Academic Office / OD Cell';
     case 'Canteen Dish Issue': return 'Canteen & Hospitality';
     default: return 'General Administration';
   }
@@ -42,19 +42,6 @@ const SubmitComplaint = () => {
   const [attachment, setAttachment] = useState('');
   const [anonymous, setAnonymous] = useState(false);
   
-  // OD Specific State
-  const [eventName, setEventName] = useState('');
-  const [eventDate, setEventDate] = useState('');
-  const [facultyInChargeName, setFacultyInChargeName] = useState('');
-  const [mentorName, setMentorName] = useState('');
-  const [classCounsellorName, setClassCounsellorName] = useState('');
-  const [hodName, setHodName] = useState('');
-  const [pendingApprovalFrom, setPendingApprovalFrom] = useState('MENTOR');
-  const [odFormStatus, setOdFormStatus] = useState('PENDING_APPROVAL');
-  const [verificationProof, setVerificationProof] = useState('');
-  const [eventReturnStatus, setEventReturnStatus] = useState('NOT_RETURNED');
-  const [presentationRemarks, setPresentationRemarks] = useState('');
-
   // Canteen Dish Issue Specific State
   const [canteenLocation, setCanteenLocation] = useState('Block A Canteen');
   const [dishName, setDishName] = useState('');
@@ -80,11 +67,6 @@ const SubmitComplaint = () => {
     if (fields.issueType !== undefined) setIssueType(fields.issueType);
     if (fields.mealTime !== undefined) setMealTime(fields.mealTime);
     if (fields.dishPhoto !== undefined) setDishPhoto(fields.dishPhoto);
-    if (fields.eventName !== undefined) setEventName(fields.eventName);
-    if (fields.eventDate !== undefined) setEventDate(fields.eventDate);
-    if (fields.facultyInChargeName !== undefined) setFacultyInChargeName(fields.facultyInChargeName);
-    if (fields.pendingApprovalFrom !== undefined) setPendingApprovalFrom(fields.pendingApprovalFrom);
-    if (fields.odFormStatus !== undefined) setOdFormStatus(fields.odFormStatus);
   };
 
   // AI live preview state
@@ -102,7 +84,7 @@ const SubmitComplaint = () => {
     try {
       const result = await api.analyzeText(
         description, 
-        category === 'OD Form Issue' ? eventDate : undefined,
+        undefined,
         category === 'Canteen Dish Issue' ? issueType : undefined
       );
       setAiPreview(result);
@@ -132,20 +114,6 @@ const SubmitComplaint = () => {
         attachment, 
         anonymous 
       };
-
-      if (category === 'OD Form Issue') {
-        payload.eventName = eventName;
-        payload.eventDate = eventDate;
-        payload.facultyInChargeName = facultyInChargeName;
-        payload.mentorName = mentorName;
-        payload.classCounsellorName = classCounsellorName;
-        payload.hodName = hodName;
-        payload.pendingApprovalFrom = pendingApprovalFrom;
-        payload.odFormStatus = odFormStatus;
-        payload.verificationProof = verificationProof;
-        payload.eventReturnStatus = eventReturnStatus;
-        payload.presentationRemarks = presentationRemarks;
-      }
 
       if (category === 'Canteen Dish Issue') {
         payload.canteenLocation = canteenLocation;
@@ -213,7 +181,7 @@ const SubmitComplaint = () => {
                 type="text"
                 id="title"
                 className="form-control"
-                placeholder="Brief summary of the issue (e.g. Wi-Fi down, OD form signature pending)"
+                placeholder="Brief summary of the issue (e.g. Wi-Fi down, canteen food quality issue)"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
@@ -234,198 +202,6 @@ const SubmitComplaint = () => {
                 ))}
               </select>
             </div>
-
-            {/* OD Form Specific Fields */}
-            {category === 'OD Form Issue' && (
-              <div style={{ 
-                padding: '1.25rem', 
-                background: 'rgba(6, 182, 212, 0.04)', 
-                border: '1px solid rgba(6, 182, 212, 0.3)', 
-                borderRadius: '8px', 
-                marginBottom: '1.5rem' 
-              }}>
-                <h4 style={{ color: 'var(--accent-cyan)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.95rem' }}>
-                  <FileText size={18} /> On-Duty (OD) Details & Signature Workflow
-                </h4>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label style={{ fontSize: '0.8rem' }}>Event / Competition Name *</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="e.g. National Technical Symposium / Inter-College Sports"
-                      value={eventName}
-                      onChange={(e) => setEventName(e.target.value)}
-                      required={category === 'OD Form Issue'}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label style={{ fontSize: '0.8rem' }}>Event Date *</label>
-                    <input
-                      type="date"
-                      className="form-control"
-                      value={eventDate}
-                      onChange={(e) => {
-                        setEventDate(e.target.value);
-                        if (description.length >= 10) triggerAIAnalysis();
-                      }}
-                      required={category === 'OD Form Issue'}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label style={{ fontSize: '0.8rem' }}>Faculty In-Charge / Coordinator</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="e.g. Prof. Arunkumar"
-                      value={facultyInChargeName}
-                      onChange={(e) => setFacultyInChargeName(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label style={{ fontSize: '0.8rem' }}>Current OD Form Status</label>
-                    <select
-                      className="form-control"
-                      value={odFormStatus}
-                      onChange={(e) => setOdFormStatus(e.target.value)}
-                    >
-                      <option value="NOT_SUBMITTED">Not Submitted Yet</option>
-                      <option value="PENDING_APPROVAL">Pending Approval / Signatures</option>
-                      <option value="REJECTED">Rejected by Faculty</option>
-                      <option value="APPROVED_NOT_UPDATED">Approved but Not Updated in Attendance</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Multi-Stage Signature Tracking */}
-                <div style={{ marginTop: '0.5rem', padding: '0.85rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.4rem', display: 'block' }}>
-                    Where is the Signature / Approval Currently Stuck?
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem' }}>
-                    {[
-                      { id: 'MENTOR', label: '1. Mentor Sign' },
-                      { id: 'CLASS_COUNSELLOR', label: '2. Class Counsellor' },
-                      { id: 'HOD', label: '3. HOD Approval' },
-                      { id: 'ACADEMIC_CELL', label: '4. Academic Cell' }
-                    ].map((stage) => (
-                      <label key={stage.id} style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '0.3rem', 
-                        fontSize: '0.75rem', 
-                        cursor: 'pointer',
-                        padding: '0.4rem',
-                        background: pendingApprovalFrom === stage.id ? 'rgba(6,182,212,0.15)' : 'transparent',
-                        border: `1px solid ${pendingApprovalFrom === stage.id ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
-                        borderRadius: '4px'
-                      }}>
-                        <input
-                          type="radio"
-                          name="pendingApprovalFrom"
-                          value={stage.id}
-                          checked={pendingApprovalFrom === stage.id}
-                          onChange={(e) => setPendingApprovalFrom(e.target.value)}
-                        />
-                        <span>{stage.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Approvers Names */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginTop: '1rem' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.7rem' }}>Mentor Name</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      style={{ fontSize: '0.8rem' }}
-                      placeholder="Mentor name"
-                      value={mentorName}
-                      onChange={(e) => setMentorName(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.7rem' }}>Class Counsellor Name</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      style={{ fontSize: '0.8rem' }}
-                      placeholder="Counsellor name"
-                      value={classCounsellorName}
-                      onChange={(e) => setClassCounsellorName(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.7rem' }}>HOD Name</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      style={{ fontSize: '0.8rem' }}
-                      placeholder="HOD name"
-                      value={hodName}
-                      onChange={(e) => setHodName(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Event Proof Attachment for Fake OD Guard */}
-                <div className="form-group" style={{ marginTop: '1rem', marginBottom: 0 }}>
-                  <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <ShieldCheck size={14} color="var(--status-resolved)" /> 
-                    Genuine OD Proof (Certificate / Hall Ticket / Registration Receipt Link or File)
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. certificate_proof.pdf or official_event_registration_pass.jpg"
-                    value={verificationProof}
-                    onChange={(e) => setVerificationProof(e.target.value)}
-                  />
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: '0.2rem' }}>
-                    Class handling faculty review this proof to verify genuine ODs and reject fraudulent submissions.
-                  </p>
-                </div>
-
-                {/* Event Return & Class Presentation Tracker */}
-                <div style={{ marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px dashed var(--border-color)' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        <Presentation size={14} color="var(--accent-blue)" /> Event Return & Class Presentation
-                      </label>
-                      <select
-                        className="form-control"
-                        value={eventReturnStatus}
-                        onChange={(e) => setEventReturnStatus(e.target.value)}
-                      >
-                        <option value="NOT_RETURNED">Not Returned Yet (Event Ongoing)</option>
-                        <option value="RETURNED_PENDING_PRESENTATION">Returned — Class Presentation Pending</option>
-                        <option value="PRESENTATION_COMPLETED">Class Presentation & Report Completed</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label style={{ fontSize: '0.8rem' }}>Presentation Remarks / Summary</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="e.g. Presented paper in class on Friday"
-                        value={presentationRemarks}
-                        onChange={(e) => setPresentationRemarks(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Canteen Dish Issue Specific Fields */}
             {category === 'Canteen Dish Issue' && (
@@ -674,9 +450,10 @@ const SubmitComplaint = () => {
           </div>
         </div>
       </div>
+
+      {/* Certificate Lightbox Modal - removed (OD feature deleted) */}
     </div>
   );
 };
 
 export default SubmitComplaint;
-

@@ -78,22 +78,27 @@ const RingChart = ({ segments, total, centerLabel }) => {
 // ─── Main Analytics Page ──────────────────────────────────────────────────────
 const AdminAnalytics = () => {
   const [stats, setStats] = useState(null);
+  const [accountability, setAccountability] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchData = async () => {
       try {
-        const data = await api.getAdminStats();
-        setStats(data);
+        const [statsData, accData] = await Promise.all([
+          api.getAdminStats(),
+          api.getAccountability().catch(() => [])
+        ]);
+        setStats(statsData);
+        setAccountability(accData || []);
       } catch (err) {
         setError('Failed to load analytics data.');
       } finally {
         setLoading(false);
       }
     };
-    fetchStats();
+    fetchData();
   }, []);
 
   if (loading) return (
@@ -207,6 +212,7 @@ const AdminAnalytics = () => {
       <div className="tab-bar">
         {[
           { id: 'overview', icon: <PieChart size={15} />, label: 'Overview' },
+          { id: 'accountability', icon: <ShieldAlert size={15} />, label: 'Accountability Trail' },
           { id: 'categories', icon: <BarChart2 size={15} />, label: 'Categories' },
           { id: 'departments', icon: <TrendingUp size={15} />, label: 'Departments' },
           { id: 'status', icon: <Target size={15} />, label: 'Status Flow' },
@@ -363,6 +369,162 @@ const AdminAnalytics = () => {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Novelty 4: SLA Department Accountability Trail Tab */}
+      {activeTab === 'accountability' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* Header & Overview Cards */}
+          <div className="glass-card" style={{ border: '1px solid rgba(6,182,212,0.3)', background: 'rgba(6,182,212,0.03)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+              <div>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.25rem' }}>
+                  <ShieldAlert size={22} color="var(--accent-cyan)" /> Department SLA Accountability Trail
+                </h3>
+                <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  Per-department tracking of on-time closure rates, average resolution duration, and SLA escalations.
+                </p>
+              </div>
+              <span className="badge badge-status-assigned" style={{ fontSize: '0.75rem', padding: '0.3rem 0.8rem' }}>
+                ⚡ Auto-Calculated SLA Metrics
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginTop: '1.25rem' }}>
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Departments Tracked</span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.2rem' }}>
+                  {accountability.length || 8}
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Overall Escalations</span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#f87171', marginTop: '0.2rem' }}>
+                  {accountability.reduce((acc, d) => acc + (d.escalatedTickets || 0), 0)}
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Avg On-Time SLA Rate</span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--status-resolved)', marginTop: '0.2rem' }}>
+                  {accountability.length > 0
+                    ? `${Math.round(accountability.reduce((acc, d) => acc + d.onTimeRate, 0) / accountability.length)}%`
+                    : '100%'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Accountability Table */}
+          <div className="glass-card">
+            <h4 style={{ marginBottom: '1rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Clock size={16} color="var(--accent-cyan)" /> Departmental SLA Performance Breakdown
+            </h4>
+
+            <div className="table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Department</th>
+                    <th>Total Tickets</th>
+                    <th>Active</th>
+                    <th>Resolved</th>
+                    <th>Escalated</th>
+                    <th>Avg Resolution</th>
+                    <th>On-Time Rate</th>
+                    <th>Compliance Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {accountability.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                        No department accountability data recorded yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    accountability.map(dept => {
+                      const isHighCompliance = dept.onTimeRate >= 85;
+                      const isMediumCompliance = dept.onTimeRate >= 70 && dept.onTimeRate < 85;
+                      const badgeColor = isHighCompliance ? '#4ade80' : isMediumCompliance ? '#facc15' : '#f87171';
+                      const badgeBg = isHighCompliance ? 'rgba(34,197,94,0.12)' : isMediumCompliance ? 'rgba(234,179,8,0.12)' : 'rgba(239,68,68,0.12)';
+                      const badgeBorder = isHighCompliance ? 'rgba(34,197,94,0.3)' : isMediumCompliance ? 'rgba(234,179,8,0.3)' : 'rgba(239,68,68,0.3)';
+
+                      return (
+                        <tr key={dept.department}>
+                          <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {dept.department}
+                          </td>
+                          <td style={{ fontWeight: 700 }}>{dept.totalTickets}</td>
+                          <td>
+                            <span style={{ color: dept.activeTickets > 0 ? 'var(--accent-cyan)' : 'var(--text-muted)' }}>
+                              {dept.activeTickets}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ color: 'var(--status-resolved)', fontWeight: 600 }}>
+                              {dept.resolvedTickets}
+                            </span>
+                          </td>
+                          <td>
+                            {dept.escalatedTickets > 0 ? (
+                              <span style={{
+                                padding: '2px 8px',
+                                background: 'rgba(239,68,68,0.15)',
+                                color: '#f87171',
+                                border: '1px solid rgba(239,68,68,0.3)',
+                                borderRadius: '10px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700
+                              }}>
+                                ⚠️ {dept.escalatedTickets}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>0</span>
+                            )}
+                          </td>
+                          <td style={{ fontSize: '0.85rem' }}>
+                            {dept.avgResolutionHours > 0 ? `${dept.avgResolutionHours} hrs` : '< 1 hr'}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', borderRadius: '4px', height: '6px', minWidth: '60px', overflow: 'hidden' }}>
+                                <div style={{
+                                  width: `${dept.onTimeRate}%`,
+                                  height: '100%',
+                                  background: badgeColor,
+                                  borderRadius: '4px'
+                                }} />
+                              </div>
+                              <span style={{ fontWeight: 700, fontSize: '0.85rem', color: badgeColor }}>
+                                {dept.onTimeRate}%
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            <span style={{
+                              padding: '3px 9px',
+                              background: badgeBg,
+                              color: badgeColor,
+                              border: `1px solid ${badgeBorder}`,
+                              borderRadius: '12px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {isHighCompliance ? '✅ Exemplary' : isMediumCompliance ? '⚡ Moderate' : '🚨 SLA Breached'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

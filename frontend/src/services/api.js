@@ -113,6 +113,14 @@ export const api = {
     return handleResponse(res);
   },
 
+  notifyOfficer: async (id) => {
+    const res = await fetch(`${BASE_URL}/complaints/${id}/notify-officer`, {
+      method: 'PUT',
+      headers: getHeaders()
+    });
+    return handleResponse(res);
+  },
+
   updateDepartment: async (id, department) => {
     const res = await fetch(`${BASE_URL}/complaints/${id}/department`, {
       method: 'PUT',
@@ -122,9 +130,18 @@ export const api = {
     return handleResponse(res);
   },
 
-  // Feedback & Reopen
+  // Feedback, Verification & Reopen (Novelty 5)
   submitFeedback: async (id, rating, comment) => {
     const res = await fetch(`${BASE_URL}/complaints/${id}/feedback`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ rating, comment })
+    });
+    return handleResponse(res);
+  },
+
+  confirmResolved: async (id, rating, comment) => {
+    const res = await fetch(`${BASE_URL}/complaints/${id}/confirm-resolved`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ rating, comment })
@@ -135,6 +152,32 @@ export const api = {
   reopenComplaint: async (id) => {
     const res = await fetch(`${BASE_URL}/complaints/${id}/reopen`, {
       method: 'POST',
+      headers: getHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  // Novelty 2: Officer Auto-Assignment Recommendations
+  getRecommendedOfficers: async (complaintId) => {
+    const res = await fetch(`${BASE_URL}/officers/recommend/${complaintId}`, {
+      method: 'GET',
+      headers: getHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  getAllOfficers: async () => {
+    const res = await fetch(`${BASE_URL}/officers`, {
+      method: 'GET',
+      headers: getHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  // Novelty 4: SLA Department Accountability Trail
+  getAccountability: async () => {
+    const res = await fetch(`${BASE_URL}/complaints/accountability`, {
+      method: 'GET',
       headers: getHeaders()
     });
     return handleResponse(res);
@@ -187,18 +230,15 @@ export const api = {
     let cat = category;
     if (!cat) {
       if (clean.includes('canteen') || clean.includes('food') || clean.includes('mess') || clean.includes('dish')) cat = 'Canteen Dish Issue';
-      else if (clean.includes('od') || clean.includes('on duty') || clean.includes('mentor') || clean.includes('counsellor')) cat = 'OD Form Issue';
       else if (clean.includes('wifi') || clean.includes('internet') || clean.includes('net')) cat = 'Internet/Wi-Fi';
       else cat = 'General Administration';
     }
 
     if (step === 1) {
       if (cat === 'Canteen Dish Issue') return { category: cat, prompt: "Which canteen or mess location did this occur in?", fieldTarget: "canteenLocation", quickReplies: ["Block A Canteen", "Hostel Boys Mess", "Central Food Court"] };
-      if (cat === 'OD Form Issue') return { category: cat, prompt: "What is the event name and date?", fieldTarget: "eventName", quickReplies: ["Technical Symposium", "Sports Meet", "Workshop"] };
       return { category: cat, prompt: "Which campus location did this occur in?", fieldTarget: "location", quickReplies: ["Academic Block 1", "Library", "Hostel Block A"] };
     } else if (step === 2) {
       if (cat === 'Canteen Dish Issue') return { category: cat, prompt: "What was the dish name and issue type?", fieldTarget: "dishName", quickReplies: ["Chicken Biryani", "Special Thali", "Tea / Snacks"] };
-      if (cat === 'OD Form Issue') return { category: cat, prompt: "Where is the approval currently stuck?", fieldTarget: "pendingApprovalFrom", quickReplies: ["1. Mentor Sign", "2. Class Counsellor", "3. HOD Approval"] };
       return { category: cat, prompt: "Would you like to submit anonymously?", fieldTarget: "anonymous", quickReplies: ["Yes, keep me anonymous 🔒", "No, include my name 👤"] };
     } else {
       return { category: cat, prompt: "Would you like to submit anonymously?", fieldTarget: "anonymous", quickReplies: ["Yes, keep me anonymous 🔒", "No, include my name 👤"] };
@@ -228,14 +268,11 @@ export const api = {
     if (clean.includes('sla') || clean.includes('escalat') || clean.includes('timeframe')) {
       return { answer: "⚡ Automatic SLA & Escalation Timeframes:\n• 🚨 CRITICAL: 24 Hours SLA (Escalates to Director)\n• 🔴 HIGH: 48 Hours SLA (Escalates to HOD)\n• 🟡 MEDIUM: 72 Hours SLA\n• 🟢 LOW: 120 Hours SLA", action: "OPEN_TRACKER", quickReplies: ["Track active complaints"] };
     }
-    if (clean.includes('od') || clean.includes('on duty') || clean.includes('mentor')) {
-      return { answer: "📌 OD Approval Procedure:\n1. Mentor Sign -> 2. Class Counsellor -> 3. HOD Approval -> 4. Academic Cell.\nGenuine registration proof is required. Fake ODs will be rejected.", action: "NAVIGATE_SUBMIT", quickReplies: ["File OD Issue", "Where is my OD stuck?"] };
-    }
     if (clean.includes('canteen') || clean.includes('food') || clean.includes('mess') || clean.includes('hygiene')) {
       return { answer: "🍲 Canteen & Food Safety: Foreign objects or hygiene issues trigger an automatic CRITICAL/HIGH priority AI override and route directly to Canteen & Hospitality.", action: "NAVIGATE_SUBMIT", quickReplies: ["Report Food Hygiene", "Report Foreign Object"] };
     }
     if (clean.includes('submit') || clean.includes('file') || clean.includes('new')) {
-      return { answer: "You can file a new complaint anytime. Click below to open the submission page!", action: "NAVIGATE_SUBMIT", quickReplies: ["File Canteen Issue", "File OD Issue"] };
+      return { answer: "You can file a new complaint anytime. Click below to open the submission page!", action: "NAVIGATE_SUBMIT", quickReplies: ["File Canteen Issue", "File New Complaint"] };
     }
     return { answer: `I analyzed your message regarding '${message}'. SCGRS provides automated SLA tracking, priority scoring, and department routing across campus.`, action: "NONE", quickReplies: ["File a Complaint", "Check SLA Rules"] };
   }

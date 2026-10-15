@@ -19,12 +19,14 @@ mongoose.connect(mongoUri)
   .then(async () => {
     console.log('MongoDB Connected Successfully to:', mongoUri);
     
-    // Seed database demo accounts and grievances
+    // Seed database demo accounts, grievances, and officers
     const authController = require('./controllers/authController');
     const complaintController = require('./controllers/complaintController');
+    const officerController = require('./controllers/officerController');
     
     await authController.seedDemoUsers();
     await complaintController.seedDemoComplaints();
+    await officerController.seedDemoOfficers();
   })
   .catch(err => {
     console.error('Database connection failed:', err.message);
@@ -34,12 +36,14 @@ mongoose.connect(mongoUri)
 // Import Routes
 const authRoutes = require('./routes/authRoutes');
 const complaintRoutes = require('./routes/complaintRoutes');
+const officerRoutes = require('./routes/officerRoutes');
 const { verifyToken, isAdmin } = require('./middleware/auth');
 const complaintController = require('./controllers/complaintController');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
 app.use('/api/complaints', complaintRoutes);
+app.use('/api/officers', officerRoutes);
 
 // Explicit routes requested in API list
 app.get('/api/admin/statistics', verifyToken, isAdmin, complaintController.getAdminStatistics);

@@ -19,8 +19,8 @@ const GlobalFloatingChatbot = () => {
     {
       id: 1,
       sender: 'bot',
-      text: "👋 Hi! I am your site-wide SCGRS AI Copilot. Ask me anything about OD forms, canteen safety, SLA rules, or tracking your complaints!",
-      quickReplies: ["File a Complaint", "How to get OD approval?", "Canteen food safety rules", "Check complaint SLA"]
+      text: "👋 Hi! I am your site-wide SCGRS AI Copilot. Ask me anything about canteen safety, SLA rules, or tracking your complaints!",
+      quickReplies: ["File a Complaint", "Canteen food safety rules", "Check complaint SLA"]
     }
   ]);
   const [input, setInput] = useState('');
@@ -473,14 +473,7 @@ const GlobalFloatingChatbot = () => {
                 🍲 Canteen & Food Safety Rules
               </button>
 
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => handleSendMessage("Explain the multi-stage OD form approval procedure")}
-                style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 0.85rem' }}
-              >
-                🎓 On-Duty (OD) Form Procedure
-              </button>
+
 
               <button
                 type="button"

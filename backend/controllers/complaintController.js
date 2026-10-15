@@ -2,6 +2,55 @@ const Complaint = require('../models/Complaint');
 const Feedback = require('../models/Feedback');
 const User = require('../models/User');
 const axios = require('axios');
+const nodemailer = require('nodemailer');
+const fs = require('fs');
+const path = require('path');
+
+// ─────────────────────────────────────────────────────────
+// Email Utility — creates an Ethereal test transporter if no
+// real SMTP credentials are configured, so the feature works
+// out-of-the-box even in dev.  Swap EMAIL_SERVICE / USER /
+// PASS in .env for production Gmail or any SMTP provider.
+// ─────────────────────────────────────────────────────────
+const createMailTransporter = async () => {
+  // Real SMTP credentials supplied in .env → use them directly
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.EMAIL_SERVICE !== 'ethereal') {
+    return nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE || 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+  }
+
+  // Try Ethereal (fake SMTP with preview URL) — requires internet access
+  try {
+    const testAccount = await nodemailer.createTestAccount();
+    return nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false,
+      auth: { user: testAccount.user, pass: testAccount.pass }
+    });
+  } catch (etherealErr) {
+    // Ethereal unreachable (offline / API down) — fall back to console-only mock
+    console.warn('⚠️  [SCGRS Email] Ethereal SMTP unavailable, using console mock transporter:', etherealErr.message);
+    return {
+      sendMail: async (opts) => {
+        console.log('\n📧 ─── [SCGRS EMAIL MOCK] ─────────────────────────────────');
+        console.log(`  To      : ${opts.to}`);
+        console.log(`  From    : ${opts.from}`);
+        console.log(`  Subject : ${opts.subject}`);
+        console.log('  (HTML body omitted — set EMAIL_USER + EMAIL_PASS in .env for real delivery)');
+        console.log('──────────────────────────────────────────────────────────\n');
+        // Return a fake info object so getTestMessageUrl() returns null gracefully
+        return { messageId: `mock-${Date.now()}@scgrs.local`, accepted: [opts.to], rejected: [] };
+      }
+    };
+  }
+};
+
 
 // Route categories to departments
 const getAssignedDepartment = (category) => {
@@ -20,8 +69,6 @@ const getAssignedDepartment = (category) => {
     case 'Ragging':
     case 'Safety':
       return 'Student Welfare / Anti-Ragging Committee';
-    case 'OD Form Issue':
-      return 'Academic Office / OD Cell';
     case 'Canteen Dish Issue':
       return 'Canteen & Hospitality';
     default:
@@ -68,118 +115,235 @@ const checkSLAEscalations = async () => {
   }
 };
 
-// Local fallback AI implementation if the Flask microservice is not online
+// Check 48-hour resolution expiry for Novelty 5
+const checkResolutionExpiry = async () => {
+  try {
+    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const expiredComplaints = await Complaint.find({
+      status: 'RESOLVED',
+      resolvedAt: { $lte: fortyEightHoursAgo }
+    });
+
+    for (const c of expiredComplaints) {
+      const fb = await Feedback.findOne({ complaintId: c._id });
+      if (!fb) {
+        c.status = 'REOPENED';
+        c.reopenCount = (c.reopenCount || 0) + 1;
+        c.adminRemarks = (c.adminRemarks ? c.adminRemarks + ' | ' : '') + '⚠️ 48-Hour Resolution Expiry: Ticket automatically reopened as resolution was unconfirmed by student within 48 hours.';
+        if (c.reopenCount >= 2) {
+          c.status = 'ESCALATED';
+          c.isEscalated = true;
+          c.escalatedTo = 'Higher Authority (Principal & Grievance Review Committee)';
+          c.adminRemarks += ' | ⚠️ Multi-Reopen Escalation: Reopened 2+ times, escalated to Higher Authority.';
+        }
+        await c.save();
+      }
+    }
+  } catch (err) {
+    console.error('Error during 48-hour resolution expiry check:', err.message);
+  }
+};
+
+// ── Novelty 1: Explainable Deterministic Priority Engine ─────────────────────
+// Algorithm: Weighted Keyword Sum + Threshold Bands
+// Dataset: keyword_severity.csv (keyword, category, department, severity_weight)
+// Cutoffs: >= 80 -> CRITICAL, 60-79 -> HIGH, 40-59 -> MEDIUM, < 40 -> LOW
+// Confidence % = min(100, Math.round(total_score))
+
+const loadKeywordDataset = () => {
+  try {
+    const csvPath = path.join(__dirname, '../data/keyword_severity.csv');
+    if (fs.existsSync(csvPath)) {
+      const content = fs.readFileSync(csvPath, 'utf8');
+      const lines = content.split(/\r?\n/).filter(line => line.trim());
+      const dataset = [];
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(',');
+        if (parts.length >= 4) {
+          dataset.push({
+            word: parts[0].trim().toLowerCase(),
+            category: parts[1].trim(),
+            department: parts[2].trim(),
+            weight: parseInt(parts[3].trim(), 10) || 10
+          });
+        }
+      }
+      if (dataset.length > 0) return dataset;
+    }
+  } catch (err) {
+    console.warn('Warning: Could not read keyword_severity.csv, using default matrix:', err.message);
+  }
+
+  // Built-in fallback
+  return [
+    { word: "harassment", weight: 40, category: "Harassment" },
+    { word: "ragging", weight: 40, category: "Ragging" },
+    { word: "threat", weight: 40, category: "Safety" },
+    { word: "violence", weight: 40, category: "Safety" },
+    { word: "assault", weight: 40, category: "Safety" },
+    { word: "emergency", weight: 40, category: "Safety" },
+    { word: "bully", weight: 35, category: "Safety" },
+    { word: "abuse", weight: 40, category: "Safety" },
+    { word: "suicidal", weight: 40, category: "Safety" },
+    { word: "weapon", weight: 40, category: "Safety" },
+    { word: "safety", weight: 35, category: "Safety" },
+    { word: "cockroach", weight: 40, category: "Canteen Dish Issue" },
+    { word: "foreign object", weight: 40, category: "Canteen Dish Issue" },
+    { word: "poison", weight: 40, category: "Canteen Dish Issue" },
+    { word: "fire", weight: 40, category: "Infrastructure" },
+    { word: "academic emergency", weight: 30, category: "Academic" },
+    { word: "flood", weight: 30, category: "Infrastructure" },
+    { word: "food poisoning", weight: 35, category: "Canteen Dish Issue" },
+    { word: "exam issue", weight: 25, category: "Academic" },
+    { word: "exam", weight: 25, category: "Academic" },
+    { word: "fees", weight: 25, category: "Academic" },
+    { word: "hall ticket", weight: 25, category: "Academic" },
+    { word: "leaking", weight: 25, category: "Infrastructure" },
+    { word: "hygiene", weight: 25, category: "Canteen Dish Issue" },
+    { word: "stale food", weight: 25, category: "Canteen Dish Issue" },
+    { word: "wifi", weight: 15, category: "Internet/Wi-Fi" },
+    { word: "canteen", weight: 15, category: "Canteen Dish Issue" },
+    { word: "bus", weight: 15, category: "Transport" },
+    { word: "fan", weight: 10, category: "Infrastructure" },
+    { word: "light", weight: 10, category: "Infrastructure" }
+  ];
+};
+
+const KEYWORD_SEVERITY = loadKeywordDataset();
+
 const localAIAnalyze = (text, eventDate = null, issueType = null) => {
-  const lowercaseText = text.toLowerCase();
-  
-  // Keyword categories
-  const low = ["fan", "light", "minor", "suggestion", "classroom equipment", "bulb", "switch", "cleanliness"];
-  const medium = ["repeated", "internet problem", "water problem", "hostel issue", "transport delay", "wifi", "wi-fi", "speed", "mess", "canteen", "bus", "od form", "on duty", "attendance not updated", "event approval", "mentor sign", "hod sign", "class counsellor", "class presentation", "od cell"];
-  const high = ["exam issue", "academic emergency", "repeated complaint", "serious infrastructure issue", "fees", "hall ticket", "grade", "results", "leaking", "flood", "broken door"];
-  const critical = ["harassment", "ragging", "threat", "violence", "safety", "assault", "emergency", "bully", "abuse", "suicidal", "steal", "theft", "weapon"];
+  const lowercaseText = (text || '').toLowerCase().replace(/[^\w\s]/g, '');
+  let maxWeight = 0;
+  const matchedKeywords = [];
+  let detectedCategory = null;
+  let assignedDepartment = null;
+
+  for (const item of KEYWORD_SEVERITY) {
+    const cleanKw = item.word.toLowerCase().replace(/[^\w\s]/g, '');
+    if (cleanKw && lowercaseText.includes(cleanKw)) {
+      const regex = new RegExp(`\\b${cleanKw}\\b`);
+      if (regex.test(lowercaseText)) {
+        matchedKeywords.push(item.word);
+        if (item.weight > maxWeight) {
+          maxWeight = item.weight;
+          detectedCategory = item.category;
+          assignedDepartment = item.department;
+        }
+      }
+    }
+  }
 
   let isPastEvent = false;
   if (eventDate) {
     try {
-      const parsed = new Date(eventDate);
-      if (parsed < new Date()) isPastEvent = true;
+      const datePart = eventDate.split('T')[0];
+      const parsedDate = new Date(datePart);
+      if (parsedDate < new Date()) {
+        isPastEvent = true;
+      }
     } catch (e) {}
   }
 
-  let basePriority = "LOW";
-  let baseScore = 0.20;
-  let matchedKeyword = null;
-
-  for (const word of critical) {
-    if (lowercaseText.includes(word)) {
-      basePriority = "CRITICAL";
-      baseScore = 0.85;
-      matchedKeyword = word;
-      break;
-    }
+  if (isPastEvent && maxWeight < 25) {
+    maxWeight = Math.max(maxWeight, 25);
   }
 
-  if (basePriority === "LOW") {
-    for (const word of high) {
-      if (lowercaseText.includes(word)) {
-        basePriority = "HIGH";
-        baseScore = 0.65;
-        matchedKeyword = word;
-        break;
-      }
-    }
+  let basePriority = 'LOW';
+  if (maxWeight >= 35) basePriority = 'CRITICAL';
+  else if (maxWeight >= 25) basePriority = 'HIGH';
+  else if (maxWeight >= 15) basePriority = 'MEDIUM';
+  else basePriority = 'LOW';
+
+  let baseScore = maxWeight > 0 ? maxWeight / 50.0 : 0.15;
+  if (isPastEvent && baseScore < 0.70) {
+    baseScore = 0.70;
   }
 
-  if (basePriority === "LOW") {
-    for (const word of medium) {
-      if (lowercaseText.includes(word)) {
-        basePriority = "MEDIUM";
-        baseScore = 0.45;
-        matchedKeyword = word;
-        break;
-      }
-    }
-  }
-
-  if (basePriority === "LOW") {
-    for (const word of low) {
-      if (lowercaseText.includes(word)) {
-        basePriority = "LOW";
-        baseScore = 0.25;
-        matchedKeyword = word;
-        break;
-      }
-    }
-  }
-
-  // Sentiment matching
-  const neg = ["not", "bad", "worst", "broken", "terrible", "unsafe", "scared", "afraid", "harassed", "fail", "delay", "poor", "unhappy", "angry", "frustrated", "disappointed", "slow", "failed", "error", "issue", "problem", "hate", "no"];
+  const negWords = ["not", "bad", "worst", "broken", "terrible", "unsafe", "scared", "afraid", "harassed", "fail", "delay", "poor", "unhappy", "angry", "frustrated", "disappointed", "slow", "failed", "error", "issue", "problem", "hate", "no", "harassment", "ragging", "violence", "abuse", "threat", "emergency", "rejected", "unapproved", "pending", "missing"];
+  const posWords = ["good", "great", "excellent", "happy", "satisfied", "solved", "fixed", "nice", "helpful", "thanks", "thank", "love", "awesome", "perfect", "resolved", "approved"];
+  
+  const words = lowercaseText.split(/\s+/);
   let negCount = 0;
-  for (const word of neg) {
-    if (lowercaseText.includes(word)) negCount++;
+  let posCount = 0;
+  for (const w of words) {
+    if (negWords.includes(w)) negCount++;
+    if (posWords.includes(w)) posCount++;
+  }
+  
+  let sentimentScore = 0;
+  let sentimentLabel = "NEUTRAL";
+  if (negCount + posCount > 0) {
+    sentimentScore = (posCount - negCount) / (posCount + negCount);
+    if (sentimentScore > 0.15) sentimentLabel = "POSITIVE";
+    else if (sentimentScore < -0.15) sentimentLabel = "NEGATIVE";
   }
 
-  let sentiment = "NEUTRAL";
-  let score = baseScore;
-  if (negCount > 0) {
-    sentiment = "NEGATIVE";
-    score += 0.10;
-  }
+  let finalScore = baseScore;
+  if (sentimentLabel === "NEGATIVE") finalScore += 0.10;
+  else if (sentimentLabel === "POSITIVE") finalScore -= 0.10;
 
-  // Map back to category
-  let priority = "LOW";
-  if (score >= 0.80) priority = "CRITICAL";
-  else if (score >= 0.60) priority = "HIGH";
-  else if (score >= 0.40) priority = "MEDIUM";
+  finalScore = Math.max(0.05, Math.min(0.99, finalScore));
 
-  let reason = matchedKeyword 
-    ? `Urgency keyword '${matchedKeyword}' detected.`
-    : "General complaint context.";
-  if (sentiment === "NEGATIVE") reason += " Negative sentiment identified.";
-
-  // Check Food Safety Override
   let foodSafetyOverride = false;
-  let finalPriority = priority;
-  let finalScore = score;
+  let overridePriority = null;
+  const criticalFoodKeywords = ["foreign object", "cockroach", "insect", "poison", "hair in food", "glass in food"];
+  const highFoodKeywords = ["hygiene", "stale food", "dirty food", "unhygiene", "spoiled food"];
 
-  if (issueType === 'FOREIGN_OBJECT' || lowercaseText.includes('foreign object') || lowercaseText.includes('cockroach') || lowercaseText.includes('insect')) {
-    finalPriority = 'CRITICAL';
+  const hasCriticalFood = issueType === 'FOREIGN_OBJECT' || criticalFoodKeywords.some(kw => new RegExp(`\\b${kw.replace(/[^\w\s]/g, '')}\\b`).test(lowercaseText));
+  const hasHighFood = issueType === 'HYGIENE' || highFoodKeywords.some(kw => new RegExp(`\\b${kw.replace(/[^\w\s]/g, '')}\\b`).test(lowercaseText));
+
+  if (hasCriticalFood) {
+    foodSafetyOverride = true;
+    overridePriority = 'CRITICAL';
     finalScore = 0.90;
-    reason = '[ALERT] Food Safety Priority Override: Escalated due to health and food safety concern (FOREIGN_OBJECT).';
+    if (!detectedCategory) detectedCategory = "Canteen Dish Issue";
+    if (!assignedDepartment) assignedDepartment = "Canteen & Hospitality";
+  } else if (hasHighFood) {
     foodSafetyOverride = true;
-  } else if (issueType === 'HYGIENE' || lowercaseText.includes('hygiene') || lowercaseText.includes('stale food') || lowercaseText.includes('dirty food')) {
-    finalPriority = 'HIGH';
-    finalScore = 0.75;
-    reason = '[ALERT] Food Safety Priority Override: Escalated due to health and food safety concern (HYGIENE).';
-    foodSafetyOverride = true;
+    overridePriority = 'HIGH';
+    finalScore = Math.max(finalScore, 0.75);
+    if (!detectedCategory) detectedCategory = "Canteen Dish Issue";
+    if (!assignedDepartment) assignedDepartment = "Canteen & Hospitality";
+  }
+
+  let priority = basePriority;
+  if (foodSafetyOverride) {
+    priority = overridePriority;
+  } else {
+    if (finalScore >= 0.70) priority = "CRITICAL";
+    else if (finalScore >= 0.50) priority = "HIGH";
+    else if (finalScore >= 0.30) priority = "MEDIUM";
+    else priority = "LOW";
+  }
+
+  const confidencePercent = Math.min(100, Math.max(5, Math.round(finalScore * 100)));
+  
+  let reason = "";
+  if (foodSafetyOverride) {
+    reason = `[ALERT] Food Safety Priority Override: Escalated due to health and food safety concern (${issueType || priority}).`;
+  } else if (matchedKeywords.length > 0) {
+    reason = `Urgency keywords detected: ${matchedKeywords.slice(0, 3).map(k => `'${k}'`).join(', ')}.`;
+  } else {
+    reason = "General vocabulary detected with neutral context.";
+  }
+
+  if (isPastEvent) {
+    reason += " [ALERT] Time-sensitive OD escalation: Event date has already passed.";
+  }
+  if (sentimentLabel === "NEGATIVE") {
+    reason += " Sentiment is negative, indicating high frustration.";
   }
 
   return {
-    priority: finalPriority,
+    priority,
     score: round(finalScore, 2),
-    sentiment,
-    reason: reason + " (Local Fallback Analysis)",
-    isFoodSafetyOverride: foodSafetyOverride
+    confidencePercent,
+    matchedKeywords,
+    sentiment: sentimentLabel,
+    reason: `${confidencePercent}% — ${priority} — ${reason}`,
+    isFoodSafetyOverride: foodSafetyOverride,
+    detectedCategory,
+    assignedDepartment
   };
 };
 
@@ -198,17 +362,6 @@ exports.createComplaint = async (req, res) => {
       anonymous, 
       location, 
       attachment,
-      eventName,
-      eventDate,
-      facultyInChargeName,
-      mentorName,
-      classCounsellorName,
-      hodName,
-      pendingApprovalFrom,
-      odFormStatus,
-      verificationProof,
-      eventReturnStatus,
-      presentationRemarks,
       canteenLocation,
       dishName,
       issueType,
@@ -226,7 +379,7 @@ exports.createComplaint = async (req, res) => {
     try {
       const aiResponse = await axios.post(`${process.env.AI_SERVICE_URL || 'http://127.0.0.1:5000'}/api/ai/analyze`, {
         text: description,
-        eventDate: eventDate || null,
+        eventDate: req.body.eventDate || null,
         issueType: issueType || null
       }, { timeout: 3000 });
       
@@ -234,7 +387,17 @@ exports.createComplaint = async (req, res) => {
       console.log('AI Service analysis results:', aiResults);
     } catch (aiError) {
       console.warn('AI Service is unreachable, falling back to backend keywords classification.', aiError.message);
-      aiResults = localAIAnalyze(description, eventDate, issueType);
+      aiResults = localAIAnalyze(description, req.body.eventDate || null, issueType);
+    }
+
+    // Always ensure matchedKeywords and confidencePercent are present
+    if (!aiResults.matchedKeywords || aiResults.matchedKeywords.length === 0) {
+      const fallbackAnalysis = localAIAnalyze(description, req.body.eventDate || null, issueType);
+      aiResults.matchedKeywords = fallbackAnalysis.matchedKeywords;
+      aiResults.confidencePercent = fallbackAnalysis.confidencePercent;
+      if (!aiResults.priority) aiResults.priority = fallbackAnalysis.priority;
+    } else if (!aiResults.confidencePercent) {
+      aiResults.confidencePercent = Math.min(100, Math.round((aiResults.score || 0.2) * 100));
     }
 
     // Dynamic routing & SLA calculation
@@ -246,6 +409,66 @@ exports.createComplaint = async (req, res) => {
     const currentYear = new Date().getFullYear();
     const complaintId = `SCGRS-${currentYear}-${String(count + 1).padStart(4, '0')}`;
 
+    // ── Novelty 3: Duplicate & Recurring-Issue Clustering ─────────────────────
+    // Check open complaints with the same category
+    let isDuplicate = false;
+    let parentComplaintId = null;
+
+    const stopWords = new Set(['the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'has', 'not', 'are', 'was', 'were', 'our', 'room', 'campus', 'complaint', 'issue', 'problem']);
+    const getTokens = (str) => {
+      return (str || '').toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 3 && !stopWords.has(w));
+    };
+
+    const newTokens = new Set(getTokens(description));
+
+    if (newTokens.size > 0) {
+      const openCandidates = await Complaint.find({
+        status: { $nin: ['RESOLVED', 'CLOSED'] },
+        category: category,
+        isDuplicate: false
+      });
+
+      for (const candidate of openCandidates) {
+        const candidateTokens = getTokens(candidate.description);
+        let commonWordCount = 0;
+        for (const token of candidateTokens) {
+          if (newTokens.has(token)) commonWordCount++;
+        }
+
+        const sameLocation = location && candidate.location && 
+          location.trim().toLowerCase() === candidate.location.trim().toLowerCase();
+
+        // If >= 3 common words, or same location with >= 2 common words
+        if (commonWordCount >= 3 || (sameLocation && commonWordCount >= 2)) {
+          isDuplicate = true;
+          parentComplaintId = candidate._id;
+
+          // Increment affectedStudentCount on parent
+          candidate.affectedStudentCount = (candidate.affectedStudentCount || 1) + 1;
+
+          // If affectedStudentCount >= 5, boost parent priority by one level
+          if (candidate.affectedStudentCount >= 5) {
+            if (candidate.priority === 'LOW') {
+              candidate.priority = 'MEDIUM';
+            } else if (candidate.priority === 'MEDIUM') {
+              candidate.priority = 'HIGH';
+            } else if (candidate.priority === 'HIGH') {
+              candidate.priority = 'CRITICAL';
+            }
+            candidate.slaDeadline = calculateSLADeadline(candidate.priority);
+            candidate.adminRemarks = (candidate.adminRemarks ? candidate.adminRemarks + ' | ' : '') +
+              `🔗 Priority escalated: Recurring issue affecting ${candidate.affectedStudentCount} students.`;
+          }
+
+          await candidate.save();
+          break;
+        }
+      }
+    }
+
     const newComplaint = new Complaint({
       complaintId,
       studentId,
@@ -254,6 +477,11 @@ exports.createComplaint = async (req, res) => {
       category,
       priority: aiResults.priority,
       priorityScore: aiResults.score,
+      confidencePercent: aiResults.confidencePercent,
+      matchedKeywords: aiResults.matchedKeywords || [],
+      parentComplaintId,
+      isDuplicate,
+      affectedStudentCount: 1,
       sentiment: aiResults.sentiment,
       priorityReason: aiResults.reason,
       department,
@@ -262,17 +490,6 @@ exports.createComplaint = async (req, res) => {
       anonymous: !!anonymous,
       slaDeadline,
       status: 'SUBMITTED',
-      eventName: eventName || '',
-      eventDate: eventDate ? new Date(eventDate) : undefined,
-      facultyInChargeName: facultyInChargeName || '',
-      mentorName: mentorName || '',
-      classCounsellorName: classCounsellorName || '',
-      hodName: hodName || '',
-      pendingApprovalFrom: pendingApprovalFrom || '',
-      odFormStatus: odFormStatus || '',
-      verificationProof: verificationProof || '',
-      eventReturnStatus: eventReturnStatus || '',
-      presentationRemarks: presentationRemarks || '',
       canteenLocation: canteenLocation || '',
       dishName: dishName || '',
       issueType: issueType || '',
@@ -291,8 +508,9 @@ exports.createComplaint = async (req, res) => {
 // Get all complaints (filtered based on roles and queries)
 exports.getComplaints = async (req, res) => {
   try {
-    // Run SLA check to auto-escalate expired complaints
+    // Run SLA check & 48-hr resolution expiry check
     await checkSLAEscalations();
+    await checkResolutionExpiry();
 
     const isUserAdmin = req.user.role === 'admin';
     let filter = {};
@@ -336,8 +554,11 @@ exports.getComplaints = async (req, res) => {
 exports.getComplaintById = async (req, res) => {
   try {
     await checkSLAEscalations();
+    await checkResolutionExpiry();
 
-    let complaint = await Complaint.findById(req.params.id).populate('studentId', 'name email');
+    let complaint = await Complaint.findById(req.params.id)
+      .populate('studentId', 'name email')
+      .populate('parentComplaintId', 'complaintId title status priority affectedStudentCount');
     if (!complaint) {
       return res.status(404).json({ message: 'Complaint not found.' });
     }
@@ -382,6 +603,11 @@ exports.updateStatus = async (req, res) => {
       return res.status(404).json({ message: 'Complaint not found.' });
     }
 
+    // Novelty 5: Track resolvedAt timestamp
+    if (status === 'RESOLVED' && complaint.status !== 'RESOLVED') {
+      complaint.resolvedAt = new Date();
+    }
+
     complaint.status = status;
     if (adminRemarks !== undefined) {
       complaint.adminRemarks = adminRemarks;
@@ -423,7 +649,11 @@ exports.assignOfficer = async (req, res) => {
       name,
       role: role || 'Department Officer',
       contact: contact || '',
-      email: email || ''
+      email: email || '',
+      // Reset notification status on every (re)assignment so admin
+      // gets a fresh "Notify Officer" button for the new assignee.
+      notified: false,
+      notifiedAt: null
     };
 
     // Auto update status to ASSIGNED if currently SUBMITTED or UNDER REVIEW
@@ -435,6 +665,132 @@ exports.assignOfficer = async (req, res) => {
     res.status(200).json(complaint);
   } catch (error) {
     res.status(500).json({ message: 'Error assigning officer.', error: error.message });
+  }
+};
+
+// Manually notify assigned officer via email (Admin only)
+exports.notifyOfficer = async (req, res) => {
+  try {
+    const complaint = await Complaint.findById(req.params.id).populate('studentId', 'name email');
+    if (!complaint) {
+      return res.status(404).json({ message: 'Complaint not found.' });
+    }
+
+    const { assignedOfficer } = complaint;
+    if (!assignedOfficer || !assignedOfficer.name) {
+      return res.status(400).json({ message: 'No officer assigned to this complaint.' });
+    }
+    if (!assignedOfficer.email) {
+      return res.status(400).json({ message: 'Assigned officer does not have an email address on record.' });
+    }
+
+    // Build email HTML
+    const priorityColors = {
+      CRITICAL: '#ef4444',
+      HIGH: '#f97316',
+      MEDIUM: '#eab308',
+      LOW: '#22c55e'
+    };
+    const priorityColor = priorityColors[complaint.priority] || '#6b7280';
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 0;">
+  <div style="max-width: 600px; margin: 30px auto; background: #1e293b; border-radius: 12px; overflow: hidden; border: 1px solid #334155;">
+    <div style="background: linear-gradient(135deg, #1e40af, #0891b2); padding: 24px 28px;">
+      <h1 style="margin: 0; font-size: 20px; color: #ffffff;">📋 Grievance Assignment Notification</h1>
+      <p style="margin: 6px 0 0; font-size: 13px; color: #bfdbfe;">Smart Campus Grievance Redressal System (SCGRS)</p>
+    </div>
+    <div style="padding: 28px;">
+      <p style="font-size: 15px; color: #cbd5e1;">Dear <strong style="color: #f1f5f9;">${assignedOfficer.name}</strong>,</p>
+      <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">
+        You have been assigned to handle the following campus grievance. Please review the details below and take appropriate action within the SLA timeframe.
+      </p>
+
+      <div style="background: #0f172a; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #334155;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <tr>
+            <td style="padding: 8px 12px; color: #64748b; width: 38%; vertical-align: top;">Complaint ID</td>
+            <td style="padding: 8px 12px; font-weight: 700; color: #38bdf8; font-family: monospace;">${complaint.complaintId}</td>
+          </tr>
+          <tr style="background: rgba(255,255,255,0.02);">
+            <td style="padding: 8px 12px; color: #64748b;">Title</td>
+            <td style="padding: 8px 12px; font-weight: 600; color: #f1f5f9;">${complaint.title}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 12px; color: #64748b;">Category</td>
+            <td style="padding: 8px 12px; color: #e2e8f0;">${complaint.category}</td>
+          </tr>
+          <tr style="background: rgba(255,255,255,0.02);">
+            <td style="padding: 8px 12px; color: #64748b;">Department</td>
+            <td style="padding: 8px 12px; color: #e2e8f0;">${complaint.department}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 12px; color: #64748b;">Priority</td>
+            <td style="padding: 8px 12px;">
+              <span style="background: ${priorityColor}22; color: ${priorityColor}; padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 12px; border: 1px solid ${priorityColor}55;">
+                ${complaint.priority}
+              </span>
+            </td>
+          </tr>
+          <tr style="background: rgba(255,255,255,0.02);">
+            <td style="padding: 8px 12px; color: #64748b;">SLA Deadline</td>
+            <td style="padding: 8px 12px; color: #f97316; font-weight: 600;">${complaint.slaDeadline ? new Date(complaint.slaDeadline).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 12px; color: #64748b;">Your Role</td>
+            <td style="padding: 8px 12px; color: #38bdf8;">${assignedOfficer.role || 'Department Officer'}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="background: #0f172a; border-radius: 8px; padding: 16px 20px; margin: 16px 0; border-left: 4px solid #0891b2;">
+        <p style="font-size: 12px; color: #64748b; margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.05em;">Description</p>
+        <p style="font-size: 14px; color: #cbd5e1; line-height: 1.6; margin: 0; white-space: pre-wrap;">${complaint.description}</p>
+      </div>
+
+      <p style="font-size: 13px; color: #94a3b8; margin-top: 24px;">
+        Please log in to the SCGRS portal to take action, update the status, and add your resolution remarks.
+      </p>
+    </div>
+    <div style="padding: 16px 28px; background: #0f172a; border-top: 1px solid #1e293b; font-size: 12px; color: #475569; text-align: center;">
+      This is an automated notification from the Smart Campus Grievance Redressal System. Do not reply to this email.
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const transporter = await createMailTransporter();
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || '"SCGRS Admin" <noreply@scgrs.edu>',
+      to: assignedOfficer.email,
+      subject: `[SCGRS] Grievance Assignment — ${complaint.complaintId} (${complaint.priority} Priority)`,
+      html: htmlBody
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+
+    // For Ethereal test accounts, log the preview URL
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    if (previewUrl) {
+      console.log(`📧 [SCGRS Notify] Email preview (Ethereal): ${previewUrl}`);
+    }
+
+    // Persist notification status
+    complaint.assignedOfficer.notified = true;
+    complaint.assignedOfficer.notifiedAt = new Date();
+    await complaint.save();
+
+    res.status(200).json({
+      message: `Notification email sent to ${assignedOfficer.email}`,
+      notifiedAt: complaint.assignedOfficer.notifiedAt,
+      previewUrl: previewUrl || null,
+      complaint
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error sending notification email.', error: error.message });
   }
 };
 
@@ -504,7 +860,7 @@ exports.submitFeedback = async (req, res) => {
   }
 };
 
-// Reopen a complaint (Student only)
+// Reopen a complaint (Student only) — Novelty 5: Multi-Reopen Escalation
 exports.reopenComplaint = async (req, res) => {
   try {
     const complaintId = req.params.id;
@@ -523,15 +879,148 @@ exports.reopenComplaint = async (req, res) => {
       return res.status(400).json({ message: 'Only resolved complaints can be reopened.' });
     }
 
-    // Delete feedback if they want to reopen, or keep it. Let's delete it so they can resubmit feedback later when resolved again.
+    // Remove old feedback
     await Feedback.deleteOne({ complaintId });
 
-    complaint.status = 'REOPENED';
-    await complaint.save();
+    complaint.reopenCount = (complaint.reopenCount || 0) + 1;
 
+    // Novelty 5: Auto-escalate if reopened 2 or more times
+    if (complaint.reopenCount >= 2) {
+      complaint.status = 'ESCALATED';
+      complaint.isEscalated = true;
+      complaint.escalatedTo = 'Higher Authority (Principal & Grievance Review Committee)';
+      complaint.escalatedAt = new Date();
+      complaint.adminRemarks = (complaint.adminRemarks ? complaint.adminRemarks + ' | ' : '') +
+        `⚠️ Multi-Reopen Escalation: Reopened ${complaint.reopenCount} times by student. Auto-escalated to Higher Authority.`;
+    } else {
+      complaint.status = 'REOPENED';
+      complaint.adminRemarks = (complaint.adminRemarks ? complaint.adminRemarks + ' | ' : '') +
+        '⚠️ Ticket reopened by student as issue remains unresolved.';
+    }
+
+    await complaint.save();
     res.status(200).json(complaint);
   } catch (error) {
     res.status(500).json({ message: 'Error reopening complaint.', error: error.message });
+  }
+};
+
+// ── Novelty 5: Student Confirm Resolution ─────────────────────────────────────
+exports.confirmResolved = async (req, res) => {
+  try {
+    const complaintId = req.params.id;
+    const { rating, comment } = req.body;
+
+    const complaint = await Complaint.findById(complaintId);
+    if (!complaint) {
+      return res.status(404).json({ message: 'Complaint not found.' });
+    }
+
+    // Verify ownership
+    if (String(complaint.studentId) !== String(req.user.id)) {
+      return res.status(403).json({ message: 'Access denied. You do not own this complaint.' });
+    }
+
+    if (complaint.status !== 'RESOLVED') {
+      return res.status(400).json({ message: 'Only resolved complaints can be confirmed.' });
+    }
+
+    // Save student verification feedback if rating is provided
+    let feedback = null;
+    if (rating && rating >= 1 && rating <= 5) {
+      feedback = await Feedback.findOneAndUpdate(
+        { complaintId },
+        { rating, comment: comment || 'Student verified resolution: confirmed fixed.' },
+        { upsert: true, new: true }
+      );
+
+      // Novelty 2 Integration: Update Officer's performance rating
+      if (complaint.assignedOfficer && complaint.assignedOfficer.name) {
+        const Officer = require('../models/Officer');
+        const officer = await Officer.findOne({ name: complaint.assignedOfficer.name });
+        if (officer) {
+          officer.openTicketCount = Math.max(0, officer.openTicketCount - 1);
+          officer.totalResolved += 1;
+          officer.totalRatingSum += rating;
+          officer.avgRating = parseFloat((officer.totalRatingSum / officer.totalResolved).toFixed(1));
+          await officer.save();
+        }
+      }
+    }
+
+    complaint.adminRemarks = (complaint.adminRemarks ? complaint.adminRemarks + ' | ' : '') +
+      '✅ Student verified resolution: Confirmed fixed.';
+    await complaint.save();
+
+    res.status(200).json({
+      message: 'Resolution confirmed successfully! Thank you for verifying.',
+      complaint,
+      feedback
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error confirming resolution.', error: error.message });
+  }
+};
+
+// ── Novelty 4: Department SLA Accountability Trail ─────────────────────────
+exports.getDepartmentAccountability = async (req, res) => {
+  try {
+    const departments = [
+      'Academic Department',
+      'Hostel Administration',
+      'Transport Department',
+      'IT Department',
+      'Maintenance Department',
+      'Student Welfare / Anti-Ragging Committee',
+      'Canteen & Hospitality',
+      'General Administration'
+    ];
+
+    const allComplaints = await Complaint.find();
+
+    const results = departments.map(dept => {
+      const deptComplaints = allComplaints.filter(c => c.department === dept);
+      const total = deptComplaints.length;
+      const resolved = deptComplaints.filter(c => c.status === 'RESOLVED');
+      const escalated = deptComplaints.filter(c => c.isEscalated);
+      const active = deptComplaints.filter(c => !['RESOLVED'].includes(c.status));
+
+      let onTimeCount = 0;
+      let totalResolutionTimeMs = 0;
+
+      resolved.forEach(c => {
+        const resTime = c.resolvedAt ? new Date(c.resolvedAt).getTime() : new Date(c.updatedAt).getTime();
+        const createTime = new Date(c.createdAt).getTime();
+        const duration = Math.max(0, resTime - createTime);
+        totalResolutionTimeMs += duration;
+
+        if (c.slaDeadline && resTime <= new Date(c.slaDeadline).getTime()) {
+          onTimeCount++;
+        } else if (!c.isEscalated) {
+          onTimeCount++;
+        }
+      });
+
+      const onTimeRate = resolved.length > 0 ? Math.round((onTimeCount / resolved.length) * 100) : 100;
+      const avgResolutionHours = resolved.length > 0
+        ? parseFloat((totalResolutionTimeMs / (resolved.length * 3600000)).toFixed(1))
+        : 0;
+
+      return {
+        department: dept,
+        totalTickets: total,
+        activeTickets: active.length,
+        resolvedTickets: resolved.length,
+        onTimeResolved: onTimeCount,
+        escalatedTickets: escalated.length,
+        onTimeRate,
+        avgResolutionHours
+      };
+    });
+
+    res.status(200).json(results);
+  } catch (error) {
+    res.status(500).json({ message: 'Error retrieving department accountability.', error: error.message });
   }
 };
 
@@ -550,7 +1039,7 @@ exports.getAdminStatistics = async (req, res) => {
     const critical = await Complaint.countDocuments({ priority: 'CRITICAL' });
 
     // Category distribution for charts/tables
-    const categories = ['Academic', 'Hostel', 'Transport', 'Infrastructure', 'Internet/Wi-Fi', 'Harassment', 'Ragging', 'Safety', 'OD Form Issue', 'Canteen Dish Issue', 'Other'];
+    const categories = ['Academic', 'Hostel', 'Transport', 'Infrastructure', 'Internet/Wi-Fi', 'Harassment', 'Ragging', 'Safety', 'Canteen Dish Issue', 'Other'];
     const categoryStats = {};
     for (const cat of categories) {
       categoryStats[cat] = await Complaint.countDocuments({ category: cat });
@@ -564,7 +1053,6 @@ exports.getAdminStatistics = async (req, res) => {
       'IT Department', 
       'Maintenance Department', 
       'Student Welfare / Anti-Ragging Committee',
-      'Academic Office / OD Cell',
       'Canteen & Hospitality',
       'General Administration'
     ];
@@ -780,3 +1268,5 @@ exports.seedDemoComplaints = async () => {
     console.error('Error seeding demo complaints:', error.message);
   }
 };
+
+exports.localAIAnalyze = localAIAnalyze;

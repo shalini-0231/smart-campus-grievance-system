@@ -8,6 +8,7 @@ const MyComplaints = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
   
   const navigate = useNavigate();
 
@@ -110,7 +111,10 @@ const MyComplaints = () => {
                 {filteredComplaints.map((c) => (
                   <tr key={c._id}>
                     <td style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--accent-cyan)' }}>{c.complaintId}</td>
-                    <td style={{ fontWeight: 500 }}>{c.title}</td>
+                    <td style={{ fontWeight: 500 }}>
+                      <div>{c.title}</div>
+                     
+                    </td>
                     <td>{c.category}</td>
                     <td>
                       <span className={getPriorityBadgeClass(c.priority)}>{c.priority}</span>
@@ -120,13 +124,15 @@ const MyComplaints = () => {
                       <span className={getStatusBadgeClass(c.status)}>{c.status}</span>
                     </td>
                     <td>
-                      <button 
-                        className="btn btn-outline" 
-                        onClick={() => navigate(`/complaints/${c._id}`)}
-                        style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                      >
-                        <Eye size={14} /> View Details
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <button 
+                          className="btn btn-outline" 
+                          onClick={() => navigate(`/complaints/${c._id}`)}
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                        >
+                          <Eye size={14} /> View Details
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -135,6 +141,8 @@ const MyComplaints = () => {
           </div>
         )}
       </div>
+
+
     </div>
   );
 };
