@@ -243,10 +243,17 @@ const ComplaintDetails = () => {
     setSuccess('');
 
     try {
-      await api.updateStatus(complaint._id, status, adminRemarks, resolutionRemarks);
+      const updateRes = await api.updateStatus(complaint._id, status, adminRemarks, resolutionRemarks);
       await api.updateDepartment(complaint._id, department);
-      setSuccess('Grievance status updated successfully!');
-      addToast(`Status updated to ${status}`, 'success');
+      
+      const notif = updateRes.notification;
+      if (notif && notif.sent) {
+        addToast(notif.message || 'Status updated & email sent to student!', 'success');
+      } else {
+        addToast(`Status updated to ${status}`, 'success');
+      }
+
+      setSuccess('Grievance status and remarks updated successfully.');
       await loadComplaintDetails();
     } catch (err) {
       setError(err.message || 'Failed to update grievance details.');
@@ -853,44 +860,87 @@ const ComplaintDetails = () => {
 
           {/* Status Timeline Card */}
           <div className="glass-card">
-            <h3 style={{ marginBottom: '1rem' }}>Grievance Lifecycle & Audit Log</h3>
+            <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Grievance Lifecycle & Audit Log</span>
+              {complaint.studentNotifiedAt && (
+                <span style={{ fontSize: '0.75rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}>
+                  <Mail size={13} /> Student Notified via Email
+                </span>
+              )}
+            </h3>
+
             <div className="timeline">
-              <div className="timeline-item">
-                <div className="timeline-dot"></div>
-                <h4>Submitted</h4>
-                <p>{formatDate(complaint.createdAt)} - Complaint lodged and automatically assigned to {complaint.department}.</p>
-              </div>
+              {complaint.statusHistory && complaint.statusHistory.length > 0 ? (
+                complaint.statusHistory.map((item, idx) => (
+                  <div key={idx} className="timeline-item">
+                    <div className={`timeline-dot ${idx === complaint.statusHistory.length - 1 ? 'active' : ''}`}></div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <h4 style={{ margin: 0 }}>
+                        {item.status}
+                      </h4>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {item.notifiedStudent && (
+                          <span style={{ fontSize: '0.72rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.3)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <Mail size={11} /> Student Emailed
+                          </span>
+                        )}
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {formatDate(item.timestamp)}
+                        </span>
+                      </div>
+                    </div>
+                    {item.adminRemarks && (
+                      <p style={{ marginTop: '0.3rem', color: 'var(--text-secondary)' }}>
+                        <strong>Admin Remarks:</strong> {item.adminRemarks}
+                      </p>
+                    )}
+                    {item.resolutionRemarks && (
+                      <p style={{ marginTop: '0.3rem', color: 'var(--status-resolved)' }}>
+                        <strong>Resolution:</strong> {item.resolutionRemarks}
+                      </p>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div className="timeline-item">
+                    <div className="timeline-dot"></div>
+                    <h4>Submitted</h4>
+                    <p>{formatDate(complaint.createdAt)} - Complaint lodged and automatically assigned to {complaint.department}.</p>
+                  </div>
 
-              {complaint.assignedOfficer && complaint.assignedOfficer.name && (
-                <div className="timeline-item">
-                  <div className="timeline-dot"></div>
-                  <h4>Assigned Officer</h4>
-                  <p>Assigned to {complaint.assignedOfficer.name} ({complaint.assignedOfficer.role || 'Officer'}).</p>
-                </div>
-              )}
+                  {complaint.assignedOfficer && complaint.assignedOfficer.name && (
+                    <div className="timeline-item">
+                      <div className="timeline-dot"></div>
+                      <h4>Assigned Officer</h4>
+                      <p>Assigned to {complaint.assignedOfficer.name} ({complaint.assignedOfficer.role || 'Officer'}).</p>
+                    </div>
+                  )}
 
-              {complaint.isEscalated && (
-                <div className="timeline-item">
-                  <div className="timeline-dot" style={{ background: 'var(--priority-critical)', boxShadow: '0 0 10px var(--priority-critical)' }}></div>
-                  <h4 style={{ color: '#f87171' }}>Auto-Escalated to Higher Authority</h4>
-                  <p>{formatDate(complaint.escalatedAt)} - SLA timer expired. Automatically escalated to: {complaint.escalatedTo || 'Principal & Campus Security Management'}.</p>
-                </div>
-              )}
+                  {complaint.isEscalated && (
+                    <div className="timeline-item">
+                      <div className="timeline-dot" style={{ background: 'var(--priority-critical)', boxShadow: '0 0 10px var(--priority-critical)' }}></div>
+                      <h4 style={{ color: '#f87171' }}>Auto-Escalated to Higher Authority</h4>
+                      <p>{formatDate(complaint.escalatedAt)} - SLA timer expired. Automatically escalated to: {complaint.escalatedTo || 'Principal & Campus Security Management'}.</p>
+                    </div>
+                  )}
 
-              {complaint.status !== 'SUBMITTED' && (
-                <div className="timeline-item">
-                  <div className="timeline-dot"></div>
-                  <h4>{complaint.status === 'REOPENED' ? 'Reopened' : 'Reviewed & Processed'}</h4>
-                  <p>Status changed to {complaint.status}. Remarks: {complaint.adminRemarks || 'None provided.'}</p>
-                </div>
-              )}
+                  {complaint.status !== 'SUBMITTED' && (
+                    <div className="timeline-item">
+                      <div className="timeline-dot"></div>
+                      <h4>{complaint.status === 'REOPENED' ? 'Reopened' : 'Reviewed & Processed'}</h4>
+                      <p>Status changed to {complaint.status}. Remarks: {complaint.adminRemarks || 'None provided.'}</p>
+                    </div>
+                  )}
 
-              {complaint.status === 'RESOLVED' && (
-                <div className="timeline-item">
-                  <div className="timeline-dot active"></div>
-                  <h4>Resolved</h4>
-                  <p>The grievance has been resolved. Student feedback requested.</p>
-                </div>
+                  {complaint.status === 'RESOLVED' && (
+                    <div className="timeline-item">
+                      <div className="timeline-dot active"></div>
+                      <h4>Resolved</h4>
+                      <p>The grievance has been resolved. Student feedback requested.</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

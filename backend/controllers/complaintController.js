@@ -51,8 +51,145 @@ const createMailTransporter = async () => {
   }
 };
 
+// Helper: Send automated email notification to student when status or remarks update
+const sendStudentStatusNotification = async (complaint, student, previousStatus, newStatus, adminRemarks, resolutionRemarks) => {
+  if (!student || !student.email || student.email === 'N/A') {
+    return { success: false, reason: 'No student email available (e.g. anonymous or missing)' };
+  }
 
-// Route categories to departments
+  const statusColors = {
+    'SUBMITTED': '#38bdf8',
+    'UNDER REVIEW': '#fbbf24',
+    'ASSIGNED': '#818cf8',
+    'IN PROGRESS': '#3b82f6',
+    'RESOLVED': '#10b981',
+    'REOPENED': '#f97316',
+    'ESCALATED': '#ef4444'
+  };
+
+  const statusColor = statusColors[newStatus] || '#38bdf8';
+  const remarksHtml = [];
+
+  if (adminRemarks && adminRemarks.trim()) {
+    remarksHtml.push(`
+      <div style="background: rgba(15, 23, 42, 0.7); border-radius: 8px; padding: 14px 18px; margin-top: 12px; border-left: 4px solid #38bdf8;">
+        <p style="margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; font-weight: 700;">Admin Remarks</p>
+        <p style="margin: 0; font-size: 14px; color: #e2e8f0; line-height: 1.5; white-space: pre-wrap;">${adminRemarks}</p>
+      </div>
+    `);
+  }
+
+  if (resolutionRemarks && resolutionRemarks.trim()) {
+    remarksHtml.push(`
+      <div style="background: rgba(16, 185, 129, 0.08); border-radius: 8px; padding: 14px 18px; margin-top: 12px; border-left: 4px solid #10b981;">
+        <p style="margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #34d399; font-weight: 700;">Official Resolution Summary</p>
+        <p style="margin: 0; font-size: 14px; color: #e2e8f0; line-height: 1.5; white-space: pre-wrap;">${resolutionRemarks}</p>
+      </div>
+    `);
+  }
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0b1120; color: #e2e8f0; margin: 0; padding: 24px 12px;">
+  <div style="max-width: 600px; margin: 0 auto; background: #1e293b; border-radius: 14px; overflow: hidden; border: 1px solid #334155; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);">
+    
+    <!-- Header -->
+    <div style="background: linear-gradient(135deg, #1e40af, #0891b2); padding: 26px 28px;">
+      <h1 style="margin: 0; font-size: 21px; color: #ffffff; letter-spacing: -0.02em;">📢 Grievance Status Update</h1>
+      <p style="margin: 6px 0 0; font-size: 13px; color: #bfdbfe;">Smart Campus Grievance Redressal System (SCGRS)</p>
+    </div>
+
+    <!-- Main Content -->
+    <div style="padding: 28px;">
+      <p style="font-size: 15px; color: #cbd5e1; margin-top: 0;">
+        Hello <strong style="color: #f8fafc;">${student.name || 'Student'}</strong>,
+      </p>
+      <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">
+        Your grievance ticket status has been updated by the campus administration. Please find the latest status details and administrative remarks below:
+      </p>
+
+      <!-- Status Banner -->
+      <div style="background: #0f172a; border-radius: 10px; padding: 18px 20px; margin: 20px 0; border: 1px solid #334155;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <tr>
+            <td style="padding: 8px 10px; color: #64748b; width: 35%;">Complaint ID</td>
+            <td style="padding: 8px 10px; font-weight: 700; color: #38bdf8; font-family: monospace; font-size: 15px;">${complaint.complaintId}</td>
+          </tr>
+          <tr style="background: rgba(255, 255, 255, 0.02);">
+            <td style="padding: 8px 10px; color: #64748b;">Title</td>
+            <td style="padding: 8px 10px; font-weight: 600; color: #f1f5f9;">${complaint.title}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 10px; color: #64748b;">Previous Status</td>
+            <td style="padding: 8px 10px; color: #94a3b8;">${previousStatus || 'SUBMITTED'}</td>
+          </tr>
+          <tr style="background: rgba(255, 255, 255, 0.02);">
+            <td style="padding: 8px 10px; color: #64748b;">New Status</td>
+            <td style="padding: 8px 10px;">
+              <span style="display: inline-block; background: ${statusColor}22; color: ${statusColor}; border: 1px solid ${statusColor}55; padding: 3px 12px; border-radius: 9999px; font-weight: 700; font-size: 12px; letter-spacing: 0.04em;">
+                ${newStatus}
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 10px; color: #64748b;">Department</td>
+            <td style="padding: 8px 10px; color: #e2e8f0;">${complaint.department}</td>
+          </tr>
+          ${complaint.assignedOfficer && complaint.assignedOfficer.name ? `
+          <tr style="background: rgba(255, 255, 255, 0.02);">
+            <td style="padding: 8px 10px; color: #64748b;">Assigned Officer</td>
+            <td style="padding: 8px 10px; color: #38bdf8; font-weight: 600;">${complaint.assignedOfficer.name} (${complaint.assignedOfficer.role || 'Officer'})</td>
+          </tr>` : ''}
+        </table>
+
+        ${remarksHtml.join('')}
+      </div>
+
+      ${newStatus === 'RESOLVED' ? `
+      <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 14px 16px; margin-top: 18px;">
+        <p style="margin: 0; font-size: 13px; color: #a7f3d0; line-height: 1.5;">
+          ⭐ <strong>Your feedback matters:</strong> If you are satisfied with this resolution, please rate our response on the portal. If the issue persists, you may reopen the ticket within 48 hours.
+        </p>
+      </div>` : ''}
+
+      <p style="font-size: 13px; color: #94a3b8; margin-top: 24px; line-height: 1.5;">
+        You can log in to the SCGRS Portal at any time to check real-time audit logs, officer details, and resolution history.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding: 16px 28px; background: #0f172a; border-top: 1px solid #1e293b; font-size: 12px; color: #475569; text-align: center;">
+      This is an automated notification from the Smart Campus Grievance Redressal System. Do not reply directly to this email.
+    </div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const transporter = await createMailTransporter();
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || '"Smart Campus Grievance System" <noreply@scgrs.campus.edu>',
+      to: student.email,
+      subject: `[SCGRS] Grievance Update: ${complaint.complaintId} is now ${newStatus}`,
+      html: htmlBody
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    if (previewUrl) {
+      console.log(`📧 [SCGRS Student Email] Preview (Ethereal): ${previewUrl}`);
+    } else {
+      console.log(`📧 [SCGRS Student Email] Sent to student ${student.email} for complaint ${complaint.complaintId}`);
+    }
+    return { success: true, previewUrl: previewUrl || null };
+  } catch (err) {
+    console.error('⚠️ [SCGRS Student Email] Failed to send email:', err.message);
+    return { success: false, error: err.message };
+  }
+};
+
 const getAssignedDepartment = (category) => {
   switch (category) {
     case 'Academic':
@@ -490,6 +627,13 @@ exports.createComplaint = async (req, res) => {
       anonymous: !!anonymous,
       slaDeadline,
       status: 'SUBMITTED',
+      statusHistory: [{
+        status: 'SUBMITTED',
+        adminRemarks: 'Grievance submitted and entered the campus queue.',
+        updatedBy: 'System / Student',
+        notifiedStudent: true,
+        timestamp: new Date()
+      }],
       canteenLocation: canteenLocation || '',
       dishName: dishName || '',
       issueType: issueType || '',
@@ -498,6 +642,23 @@ exports.createComplaint = async (req, res) => {
     });
 
     await newComplaint.save();
+
+    // Send submission acknowledgement email to student (async non-blocking)
+    if (!anonymous) {
+      User.findById(studentId).select('name email').then(studentUser => {
+        if (studentUser && studentUser.email) {
+          sendStudentStatusNotification(
+            newComplaint,
+            studentUser,
+            null,
+            'SUBMITTED',
+            'Your grievance has been safely logged into the SCGRS system. Our department administration will review and route your request within the specified SLA timeframe.',
+            ''
+          ).catch(e => console.warn('Submission student notification skipped:', e.message));
+        }
+      }).catch(err => console.warn('Student lookup for email skipped:', err.message));
+    }
+
     res.status(201).json(newComplaint);
 
   } catch (error) {
@@ -598,10 +759,15 @@ exports.updateStatus = async (req, res) => {
       return res.status(400).json({ message: 'Status is required.' });
     }
 
-    const complaint = await Complaint.findById(req.params.id);
+    const complaint = await Complaint.findById(req.params.id).populate('studentId', 'name email');
     if (!complaint) {
       return res.status(404).json({ message: 'Complaint not found.' });
     }
+
+    const previousStatus = complaint.status;
+    const isStatusChanged = previousStatus !== status;
+    const isRemarksChanged = (adminRemarks !== undefined && adminRemarks !== complaint.adminRemarks) ||
+                            (resolutionRemarks !== undefined && resolutionRemarks !== complaint.resolutionRemarks);
 
     // Novelty 5: Track resolvedAt timestamp
     if (status === 'RESOLVED' && complaint.status !== 'RESOLVED') {
@@ -624,8 +790,47 @@ exports.updateStatus = async (req, res) => {
       };
     }
 
+    // Trigger automated email notification to student if status or remarks changed
+    let notificationResult = { success: false, reason: 'No status or remarks change detected' };
+    if (isStatusChanged || isRemarksChanged) {
+      // Check if student identity is known and not anonymous
+      const studentObj = complaint.studentId;
+      if (studentObj && studentObj.email && (!complaint.anonymous || req.body.forceNotifyStudent)) {
+        notificationResult = await sendStudentStatusNotification(
+          complaint,
+          studentObj,
+          previousStatus,
+          status,
+          complaint.adminRemarks,
+          complaint.resolutionRemarks
+        );
+        if (notificationResult.success) {
+          complaint.studentNotifiedAt = new Date();
+        }
+      }
+    }
+
+    // Push entry to status audit history
+    complaint.statusHistory.push({
+      status,
+      adminRemarks: complaint.adminRemarks || '',
+      resolutionRemarks: complaint.resolutionRemarks || '',
+      updatedBy: req.user && req.user.email ? `${req.user.name || 'Admin'} (${req.user.email})` : 'Administrator',
+      notifiedStudent: !!notificationResult.success,
+      timestamp: new Date()
+    });
+
     await complaint.save();
-    res.status(200).json(complaint);
+    res.status(200).json({
+      complaint,
+      notification: {
+        sent: !!notificationResult.success,
+        previewUrl: notificationResult.previewUrl || null,
+        message: notificationResult.success
+          ? `Notification email sent to student (${complaint.studentId?.email || 'Student'})`
+          : 'Status updated. (Email notification skipped or mock logged)'
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: 'Error updating complaint status.', error: error.message });
   }

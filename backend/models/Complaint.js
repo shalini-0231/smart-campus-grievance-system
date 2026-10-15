@@ -163,7 +163,20 @@ const ComplaintSchema = new mongoose.Schema({
   reopenCount: {
     type: Number,
     default: 0
-  }
+  },
+  // ── Notification Tracking & Status History ────────────────────────────────
+  studentNotifiedAt: {
+    type: Date,
+    default: null
+  },
+  statusHistory: [{
+    status: { type: String, required: true },
+    adminRemarks: { type: String, default: '' },
+    resolutionRemarks: { type: String, default: '' },
+    updatedBy: { type: String, default: 'Admin' },
+    notifiedStudent: { type: Boolean, default: false },
+    timestamp: { type: Date, default: Date.now }
+  }]
 }, {
   timestamps: true
 });
