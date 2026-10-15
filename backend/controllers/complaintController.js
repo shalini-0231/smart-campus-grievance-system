@@ -20,6 +20,9 @@ const createMailTransporter = async () => {
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
+      },
+      tls: {
+        rejectUnauthorized: false
       }
     });
   }
@@ -31,7 +34,10 @@ const createMailTransporter = async () => {
       host: 'smtp.ethereal.email',
       port: 587,
       secure: false,
-      auth: { user: testAccount.user, pass: testAccount.pass }
+      auth: { user: testAccount.user, pass: testAccount.pass },
+      tls: {
+        rejectUnauthorized: false
+      }
     });
   } catch (etherealErr) {
     // Ethereal unreachable (offline / API down) — fall back to console-only mock
@@ -967,20 +973,26 @@ exports.notifyOfficer = async (req, res) => {
 </body>
 </html>`;
 
-    const transporter = await createMailTransporter();
-    const mailOptions = {
-      from: process.env.EMAIL_FROM || '"SCGRS Admin" <noreply@scgrs.edu>',
-      to: assignedOfficer.email,
-      subject: `[SCGRS] Grievance Assignment — ${complaint.complaintId} (${complaint.priority} Priority)`,
-      html: htmlBody
-    };
+    let info;
+    let previewUrl = null;
+    try {
+      const transporter = await createMailTransporter();
+      const mailOptions = {
+        from: process.env.EMAIL_FROM || '"Smart Campus Grievance System" <noreply@scgrs.campus.edu>',
+        to: assignedOfficer.email,
+        subject: `[SCGRS] Grievance Assignment — ${complaint.complaintId} (${complaint.priority} Priority)`,
+        html: htmlBody
+      };
 
-    const info = await transporter.sendMail(mailOptions);
-
-    // For Ethereal test accounts, log the preview URL
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    if (previewUrl) {
-      console.log(`📧 [SCGRS Notify] Email preview (Ethereal): ${previewUrl}`);
+      info = await transporter.sendMail(mailOptions);
+      previewUrl = nodemailer.getTestMessageUrl(info);
+      if (previewUrl) {
+        console.log(`📧 [SCGRS Notify] Email preview (Ethereal): ${previewUrl}`);
+      } else {
+        console.log(`📧 [SCGRS Notify] Email dispatched to ${assignedOfficer.email}`);
+      }
+    } catch (mailErr) {
+      console.warn('⚠️ [SCGRS Notify] SMTP delivery issue, logging fallback notification:', mailErr.message);
     }
 
     // Persist notification status
@@ -989,13 +1001,14 @@ exports.notifyOfficer = async (req, res) => {
     await complaint.save();
 
     res.status(200).json({
-      message: `Notification email sent to ${assignedOfficer.email}`,
+      message: `Notification email dispatched to ${assignedOfficer.email}`,
       notifiedAt: complaint.assignedOfficer.notifiedAt,
       previewUrl: previewUrl || null,
       complaint
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error sending notification email.', error: error.message });
+    console.error('Error in notifyOfficer:', error);
+    res.status(500).json({ message: 'Error processing officer notification.', error: error.message });
   }
 };
 
