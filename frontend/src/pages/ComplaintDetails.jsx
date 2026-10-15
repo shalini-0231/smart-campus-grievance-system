@@ -10,6 +10,7 @@ import {
   FileText, CheckCircle2, AlertCircle, ExternalLink,
   Eye, FileImage, Download, Upload, Send, Sparkles, Users, Award, Layers
 } from 'lucide-react';
+import SLACountdownBadge from '../components/SLACountdownBadge';
 
 
 // Live SLA Countdown Timer Component
@@ -578,8 +579,16 @@ const ComplaintDetails = () => {
                   <Clock size={14} color="var(--accent-cyan)" />
                   <span>SLA DEADLINE</span>
                 </div>
-                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent-cyan)' }}>
+                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent-cyan)', marginBottom: '0.3rem' }}>
                   {formatDate(complaint.slaDeadline)}
+                </div>
+                <div>
+                  <SLACountdownBadge
+                    deadline={complaint.slaDeadline}
+                    status={complaint.status}
+                    isEscalated={complaint.isEscalated}
+                    size="small"
+                  />
                 </div>
               </div>
               

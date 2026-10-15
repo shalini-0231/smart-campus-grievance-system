@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
-import { ClipboardList, PlusCircle, AlertTriangle, Eye, RefreshCw } from 'lucide-react';
+import { ClipboardList, PlusCircle, AlertTriangle, Eye, RefreshCw, Clock } from 'lucide-react';
+import SLACountdownBadge from '../components/SLACountdownBadge';
 
 const MyComplaints = () => {
   const [complaints, setComplaints] = useState([]);
@@ -102,6 +102,7 @@ const MyComplaints = () => {
                   <th>Title</th>
                   <th>Category</th>
                   <th>Priority</th>
+                  <th>SLA Timer</th>
                   <th>Department</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -118,6 +119,14 @@ const MyComplaints = () => {
                     <td>{c.category}</td>
                     <td>
                       <span className={getPriorityBadgeClass(c.priority)}>{c.priority}</span>
+                    </td>
+                    <td>
+                      <SLACountdownBadge
+                        deadline={c.slaDeadline}
+                        status={c.status}
+                        isEscalated={c.isEscalated}
+                        size="small"
+                      />
                     </td>
                     <td>{c.department}</td>
                     <td>

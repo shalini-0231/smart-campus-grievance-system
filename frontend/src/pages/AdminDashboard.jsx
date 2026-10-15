@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { ClipboardList, Clock, CheckCircle2, AlertTriangle, ShieldAlert, RefreshCw, Eye, Layers, Search, BarChart2, Send } from 'lucide-react';
+import { ClipboardList, Clock, CheckCircle2, AlertTriangle, ShieldAlert, RefreshCw, Eye, Layers, Search, BarChart2, Send, Timer } from 'lucide-react';
+import SLACountdownBadge from '../components/SLACountdownBadge';
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -221,6 +222,7 @@ const AdminDashboard = () => {
                     <th>Student</th>
                     <th>Title</th>
                     <th>Priority</th>
+                    <th>SLA Timer</th>
                     <th>Department</th>
                     <th>Responsible Officer</th>
                     <th>Status</th>
@@ -277,6 +279,14 @@ const AdminDashboard = () => {
                               {c.confidencePercent}% conf
                             </small>
                           )}
+                        </td>
+                        <td>
+                          <SLACountdownBadge
+                            deadline={c.slaDeadline}
+                            status={c.status}
+                            isEscalated={c.isEscalated}
+                            size="small"
+                          />
                         </td>
                         <td style={{ fontSize: '0.8rem' }}>{c.department}</td>
                         <td style={{ fontSize: '0.8rem', color: c.assignedOfficer?.name ? 'var(--text-primary)' : 'var(--text-muted)' }}>
